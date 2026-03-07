@@ -1,8 +1,7 @@
 import ffmpeg from 'fluent-ffmpeg';
 import { join } from 'node:path';
 import type { ProjectConfig } from '@video-editor/shared';
-
-const DATA_DIR = join(process.cwd(), 'data', 'projects');
+import { DATA_DIR } from '../config.js';
 
 interface ExportProgress {
   percent: number;

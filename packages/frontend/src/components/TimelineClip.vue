@@ -1,5 +1,5 @@
 <template>
-  <div class="clip" :class="{ selected }" :style="clipStyle" @mousedown.stop="onSelect">
+  <div class="clip" :class="{ selected, active }" :style="clipStyle" @mousedown.stop="onSelect">
     <div class="handle left" @mousedown.stop="startTrim('in', $event)" />
     <div class="clip-body" @mousedown.stop="startDrag($event)">
       <span class="clip-label">{{ source?.filename ?? 'Unknown' }}</span>
@@ -16,14 +16,16 @@ import type { Clip, SourceFile } from '@video-editor/shared';
 
 const props = defineProps<{
   clip: Clip;
+  trackClips: Clip[];
   source: SourceFile | undefined;
   zoom: number;
+  active: boolean;
 }>();
 
 const emit = defineEmits<{
   update: [changes: Partial<Clip>];
+  trim: [changes: Partial<Clip>];
   remove: [];
-  select: [];
 }>();
 
 const selected = ref(false);
@@ -33,18 +35,42 @@ const clipStyle = computed(() => ({
   width: `${(props.clip.outPoint - props.clip.inPoint) * props.zoom}px`,
 }));
 
+function getSiblingBounds() {
+  const clipDuration = props.clip.outPoint - props.clip.inPoint;
+  const clipEnd = props.clip.timelineStart + clipDuration;
+  let prevEnd = 0;
+  let nextStart = Infinity;
+
+  for (const other of props.trackClips) {
+    if (other.id === props.clip.id) continue;
+    const otherEnd = other.timelineStart + (other.outPoint - other.inPoint);
+    if (otherEnd <= props.clip.timelineStart + 0.01) {
+      prevEnd = Math.max(prevEnd, otherEnd);
+    }
+    if (other.timelineStart >= clipEnd - 0.01) {
+      nextStart = Math.min(nextStart, other.timelineStart);
+    }
+  }
+
+  return { prevEnd, nextStart };
+}
+
 function onSelect() {
   selected.value = true;
-  emit('select');
 }
 
 function startDrag(e: MouseEvent) {
   const startX = e.clientX;
   const startPos = props.clip.timelineStart;
+  const clipDuration = props.clip.outPoint - props.clip.inPoint;
+  const { prevEnd, nextStart } = getSiblingBounds();
 
   function onMove(ev: MouseEvent) {
     const dx = ev.clientX - startX;
-    const newStart = Math.max(0, startPos + dx / props.zoom);
+    let newStart = startPos + dx / props.zoom;
+    newStart = Math.max(prevEnd, newStart);
+    newStart = Math.min(nextStart - clipDuration, newStart);
+    newStart = Math.max(0, newStart);
     emit('update', { timelineStart: Math.round(newStart * 100) / 100 });
   }
 
@@ -69,16 +95,17 @@ function startTrim(side: 'in' | 'out', e: MouseEvent) {
 
     if (side === 'in') {
       const newIn = Math.max(0, startIn + dt);
+      const newTimelineStart = Math.max(0, startTimelineStart + dt);
       if (newIn < startOut) {
-        emit('update', {
+        emit('trim', {
           inPoint: Math.round(newIn * 100) / 100,
-          timelineStart: Math.round((startTimelineStart + dt) * 100) / 100,
+          timelineStart: Math.round(newTimelineStart * 100) / 100,
         });
       }
     } else {
       const maxOut = props.source?.duration ?? startOut;
       const newOut = Math.min(maxOut, Math.max(startIn + 0.1, startOut + dt));
-      emit('update', { outPoint: Math.round(newOut * 100) / 100 });
+      emit('trim', { outPoint: Math.round(newOut * 100) / 100 });
     }
   }
 
@@ -120,6 +147,11 @@ function formatDuration(seconds: number): string {
 .clip.selected {
   border-color: #6c63ff;
   box-shadow: 0 0 6px rgba(108, 99, 255, 0.4);
+}
+
+.clip.active {
+  border-color: #ff9f43;
+  box-shadow: 0 0 8px rgba(255, 159, 67, 0.5);
 }
 
 .handle {

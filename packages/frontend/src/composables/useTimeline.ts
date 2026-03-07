@@ -44,3 +44,5 @@ export function useTimeline(config: () => ProjectConfig | null) {
     setZoom,
   };
 }
+
+export type TimelineControls = ReturnType<typeof useTimeline>;

@@ -7,7 +7,7 @@ import globals from 'globals';
 
 export default [
   {
-    ignores: ['**/dist/**', '**/node_modules/**', 'data/**'],
+    ignores: ['**/dist/**', '**/node_modules/**', '**/.vite/**', 'data/**'],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
