@@ -1,0 +1,170 @@
+<template>
+  <div class="file-uploader">
+    <h3>Sources</h3>
+    <div
+      class="drop-zone"
+      :class="{ dragover }"
+      @dragover.prevent="dragover = true"
+      @dragleave="dragover = false"
+      @drop.prevent="onDrop"
+    >
+      <p>Drop video files here</p>
+      <input ref="fileInput" type="file" accept="video/*" multiple @change="onFileSelect" />
+      <button @click="($refs.fileInput as HTMLInputElement).click()">Browse</button>
+    </div>
+    <div v-if="uploading" class="uploading">Uploading...</div>
+    <ul class="source-list">
+      <li
+        v-for="source in sources"
+        :key="source.id"
+        draggable="true"
+        @dragstart="onDragStart($event, source.id)"
+      >
+        <span class="filename">{{ source.filename }}</span>
+        <span class="duration">{{ formatDuration(source.duration) }}</span>
+        <div class="source-actions">
+          <button class="small" title="Add to timeline" @click="$emit('addToTimeline', source.id)">
+            +
+          </button>
+        </div>
+      </li>
+    </ul>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref } from 'vue';
+import type { SourceFile } from '@video-editor/shared';
+import * as api from '../api/client';
+
+const props = defineProps<{
+  projectId: string;
+  sources: SourceFile[];
+}>();
+
+const emit = defineEmits<{
+  uploaded: [source: SourceFile];
+  addToTimeline: [sourceId: string];
+}>();
+
+const dragover = ref(false);
+const uploading = ref(false);
+const fileInput = ref<HTMLInputElement | null>(null);
+
+async function uploadFiles(files: FileList) {
+  uploading.value = true;
+  try {
+    for (const file of files) {
+      const source = await api.uploadSource(props.projectId, file);
+      emit('uploaded', source);
+    }
+  } finally {
+    uploading.value = false;
+  }
+}
+
+function onDrop(e: DragEvent) {
+  dragover.value = false;
+  if (e.dataTransfer?.files.length) {
+    uploadFiles(e.dataTransfer.files);
+  }
+}
+
+function onFileSelect(e: Event) {
+  const input = e.target as HTMLInputElement;
+  if (input.files?.length) {
+    uploadFiles(input.files);
+    input.value = '';
+  }
+}
+
+function onDragStart(e: DragEvent, sourceId: string) {
+  e.dataTransfer?.setData('sourceId', sourceId);
+}
+
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+</script>
+
+<style scoped>
+.file-uploader {
+  padding: 12px;
+}
+
+h3 {
+  margin-bottom: 12px;
+  font-size: 14px;
+  color: #6c63ff;
+}
+
+.drop-zone {
+  border: 2px dashed #4a4e69;
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+  margin-bottom: 12px;
+  transition: border-color 0.2s;
+}
+
+.drop-zone.dragover {
+  border-color: #6c63ff;
+  background: rgba(108, 99, 255, 0.1);
+}
+
+.drop-zone input {
+  display: none;
+}
+
+.drop-zone p {
+  font-size: 12px;
+  color: #888;
+  margin-bottom: 8px;
+}
+
+.uploading {
+  font-size: 12px;
+  color: #6c63ff;
+  margin-bottom: 8px;
+}
+
+.source-list {
+  list-style: none;
+}
+
+.source-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: #16213e;
+  border-radius: 4px;
+  margin-bottom: 4px;
+  cursor: grab;
+  font-size: 13px;
+}
+
+.source-list li:hover {
+  background: #1a1a4e;
+}
+
+.filename {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.duration {
+  font-size: 11px;
+  color: #888;
+}
+
+.small {
+  padding: 2px 8px;
+  font-size: 14px;
+  font-weight: bold;
+}
+</style>
