@@ -59,8 +59,10 @@ export function getStreamUrl(projectId: string, sourceId: string): string {
   return `${BASE}/projects/${projectId}/sources/${sourceId}/stream`;
 }
 
-export function startExport(projectId: string): Promise<{ status: string }> {
-  return request(`/projects/${projectId}/export`, { method: 'POST' });
+export async function startExport(projectId: string): Promise<{ status: string }> {
+  const res = await fetch(`${BASE}/projects/${projectId}/export`, { method: 'POST' });
+  if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
+  return res.json();
 }
 
 export function getExportStatus(

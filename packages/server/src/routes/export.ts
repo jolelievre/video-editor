@@ -9,7 +9,9 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
     try {
       const config = await getProject(request.params.id);
       // Start export in background (don't await)
-      startExport(config);
+      startExport(config).catch((err) => {
+        request.log.error({ err }, 'Export failed');
+      });
       return reply.status(202).send({ status: 'processing' });
     } catch {
       return reply.status(404).send({ error: 'Project not found' });

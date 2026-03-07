@@ -50,7 +50,7 @@
               :source="config.sources.find((s) => s.id === clip.sourceId)"
               :zoom="tl.zoomLevel.value"
               :active="clip.id === activeClipId"
-              @update="$emit('updateClip', { clipId: clip.id, changes: $event })"
+              @move="store.moveClip(clip.id, $event)"
               @trim="onTrim(track.clips, clip, $event)"
               @remove="$emit('removeClip', clip.id)"
             />
@@ -76,7 +76,6 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  updateClip: [payload: { clipId: string; changes: Record<string, number> }];
   removeClip: [clipId: string];
   seek: [time: number];
   togglePlay: [];
@@ -140,7 +139,7 @@ function onTrim(trackClips: Clip[], trimmedClip: Clip, changes: Partial<Clip>) {
     const prevClips = sorted.filter((c) => c.timelineStart < trimmedClip.timelineStart).reverse();
 
     // Push each previous clip left, cascading
-    let pushAmount = overflow;
+    const pushAmount = overflow;
     for (const clip of prevClips) {
       const clipEnd = clip.timelineStart + (clip.outPoint - clip.inPoint);
       if (clipEnd > updatedClip.timelineStart - pushAmount + overflow) {

@@ -37,7 +37,6 @@
       :tl="tl"
       :active-clip-id="preview.activeClip.value?.id ?? null"
       :is-playing="preview.isPlaying.value"
-      @update-clip="store.updateClip($event.clipId, $event.changes)"
       @remove-clip="store.removeClip($event)"
       @seek="preview.seek($event)"
       @toggle-play="togglePlay"

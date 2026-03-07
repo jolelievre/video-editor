@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 import { getProject, saveProject } from '../services/project-store.js';
 import { saveUpload, deleteFile } from '../services/file-manager.js';
-import { DATA_DIR } from '../config.js';
+import { DATA_DIR } from '@video-editor/shared';
 
 export const fileRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Params: { id: string } }>('/:id/sources', async (request, reply) => {

@@ -2,8 +2,8 @@ import { writeFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
 import ffmpeg from 'fluent-ffmpeg';
+import { DATA_DIR } from '@video-editor/shared';
 import type { SourceFile } from '@video-editor/shared';
-import { DATA_DIR } from '../config.js';
 
 function mediaDir(projectId: string): string {
   return join(DATA_DIR, projectId, 'media');

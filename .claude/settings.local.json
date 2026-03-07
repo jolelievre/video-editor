@@ -7,7 +7,10 @@
       "Bash(npm install:*)",
       "Bash(npm run:*)",
       "Bash(npm test:*)",
-      "Bash(open:*)"
+      "Bash(open:*)",
+      "Bash(ls:*)",
+      "Bash(chmod +x:*)",
+      "Bash(npx:*)"
     ]
   }
 }

@@ -23,7 +23,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  update: [changes: Partial<Clip>];
+  move: [newTimelineStart: number];
   trim: [changes: Partial<Clip>];
   remove: [];
 }>();
@@ -35,26 +35,6 @@ const clipStyle = computed(() => ({
   width: `${(props.clip.outPoint - props.clip.inPoint) * props.zoom}px`,
 }));
 
-function getSiblingBounds() {
-  const clipDuration = props.clip.outPoint - props.clip.inPoint;
-  const clipEnd = props.clip.timelineStart + clipDuration;
-  let prevEnd = 0;
-  let nextStart = Infinity;
-
-  for (const other of props.trackClips) {
-    if (other.id === props.clip.id) continue;
-    const otherEnd = other.timelineStart + (other.outPoint - other.inPoint);
-    if (otherEnd <= props.clip.timelineStart + 0.01) {
-      prevEnd = Math.max(prevEnd, otherEnd);
-    }
-    if (other.timelineStart >= clipEnd - 0.01) {
-      nextStart = Math.min(nextStart, other.timelineStart);
-    }
-  }
-
-  return { prevEnd, nextStart };
-}
-
 function onSelect() {
   selected.value = true;
 }
@@ -62,16 +42,11 @@ function onSelect() {
 function startDrag(e: MouseEvent) {
   const startX = e.clientX;
   const startPos = props.clip.timelineStart;
-  const clipDuration = props.clip.outPoint - props.clip.inPoint;
-  const { prevEnd, nextStart } = getSiblingBounds();
 
   function onMove(ev: MouseEvent) {
     const dx = ev.clientX - startX;
-    let newStart = startPos + dx / props.zoom;
-    newStart = Math.max(prevEnd, newStart);
-    newStart = Math.min(nextStart - clipDuration, newStart);
-    newStart = Math.max(0, newStart);
-    emit('update', { timelineStart: Math.round(newStart * 100) / 100 });
+    const newStart = Math.max(0, startPos + dx / props.zoom);
+    emit('move', Math.round(newStart * 100) / 100);
   }
 
   function onUp() {

@@ -1,0 +1,21 @@
+{
+  "name": "@video-editor/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "video-cli": "./src/index.ts"
+  },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@video-editor/shared": "*",
+    "@video-editor/server": "*",
+    "commander": "^13.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  }
+}

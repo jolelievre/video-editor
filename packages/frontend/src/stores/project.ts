@@ -91,6 +91,32 @@ export const useProjectStore = defineStore('project', () => {
     }
   }
 
+  function moveClip(clipId: string, newTimelineStart: number) {
+    if (!config.value) return;
+    for (const track of config.value.timeline.tracks) {
+      const clip = track.clips.find((c) => c.id === clipId);
+      if (!clip) continue;
+
+      clip.timelineStart = Math.round(Math.max(0, newTimelineStart) * 100) / 100;
+
+      // Sort clips by timelineStart
+      track.clips.sort((a, b) => a.timelineStart - b.timelineStart);
+
+      // Push overlapping clips to the right
+      for (let i = 0; i < track.clips.length - 1; i++) {
+        const current = track.clips[i];
+        const currentEnd = current.timelineStart + (current.outPoint - current.inPoint);
+        const next = track.clips[i + 1];
+        if (next.timelineStart < currentEnd) {
+          next.timelineStart = Math.round(currentEnd * 100) / 100;
+        }
+      }
+
+      debouncedSave();
+      return;
+    }
+  }
+
   return {
     config,
     loading,
@@ -101,5 +127,6 @@ export const useProjectStore = defineStore('project', () => {
     addClipToTimeline,
     removeClip,
     updateClip,
+    moveClip,
   };
 });
