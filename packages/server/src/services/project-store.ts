@@ -4,8 +4,7 @@ import { join } from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
 import { projectConfigSchema } from '@video-editor/shared';
 import type { ProjectConfig } from '@video-editor/shared';
-
-const DATA_DIR = join(process.cwd(), 'data', 'projects');
+import { DATA_DIR } from '../config.js';
 
 async function ensureDataDir() {
   if (!existsSync(DATA_DIR)) {

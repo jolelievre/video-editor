@@ -22,24 +22,35 @@
       <div class="right-panel">
         <VideoPreview
           :project-id="store.config.id"
-          :sources="store.config.sources"
-          :selected-source-id="selectedSourceId"
+          :stream-url="preview.streamUrl.value"
+          :source-time="preview.sourceTime.value"
+          :is-playing="preview.isPlaying.value"
+          :playhead-position="tl.playheadPosition.value"
+          :total-duration="tl.totalDuration.value"
+          :active-clip-id="preview.activeClip.value?.id ?? null"
+          @toggle-play="togglePlay"
         />
       </div>
     </div>
     <Timeline
       :config="store.config"
+      :tl="tl"
+      :active-clip-id="preview.activeClip.value?.id ?? null"
+      :is-playing="preview.isPlaying.value"
       @update-clip="store.updateClip($event.clipId, $event.changes)"
       @remove-clip="store.removeClip($event)"
-      @select-source="selectedSourceId = $event"
+      @seek="preview.seek($event)"
+      @toggle-play="togglePlay"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { useProjectStore } from '../stores/project';
+import { useTimeline } from '../composables/useTimeline';
+import { useVideoPreview } from '../composables/useVideoPreview';
 import type { SourceFile } from '@video-editor/shared';
 import FileUploader from './FileUploader.vue';
 import VideoPreview from './VideoPreview.vue';
@@ -48,7 +59,22 @@ import ExportButton from './ExportButton.vue';
 
 const route = useRoute();
 const store = useProjectStore();
-const selectedSourceId = ref<string | null>(null);
+
+const tl = useTimeline(() => store.config);
+const preview = useVideoPreview(
+  () => store.config,
+  tl.playheadPosition,
+  tl.totalDuration,
+  route.params.id as string,
+);
+
+function togglePlay() {
+  if (preview.isPlaying.value) {
+    preview.pause();
+  } else {
+    preview.play();
+  }
+}
 
 onMounted(() => {
   store.load(route.params.id as string);

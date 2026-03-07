@@ -1,9 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { buildApp } from '../app.js';
 import { rm } from 'node:fs/promises';
-import { join } from 'node:path';
-
-const DATA_DIR = join(process.cwd(), 'data', 'projects');
+import { buildApp } from '../app.js';
+import { DATA_DIR } from '../config.js';
 
 describe('Project routes', () => {
   let app: Awaited<ReturnType<typeof buildApp>>;

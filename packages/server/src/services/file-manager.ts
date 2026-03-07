@@ -3,8 +3,7 @@ import { join } from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
 import ffmpeg from 'fluent-ffmpeg';
 import type { SourceFile } from '@video-editor/shared';
-
-const DATA_DIR = join(process.cwd(), 'data', 'projects');
+import { DATA_DIR } from '../config.js';
 
 function mediaDir(projectId: string): string {
   return join(DATA_DIR, projectId, 'media');

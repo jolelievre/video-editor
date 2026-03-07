@@ -3,8 +3,7 @@ import { join } from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 import { getProject, saveProject } from '../services/project-store.js';
 import { saveUpload, deleteFile } from '../services/file-manager.js';
-
-const DATA_DIR = join(process.cwd(), 'data', 'projects');
+import { DATA_DIR } from '../config.js';
 
 export const fileRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Params: { id: string } }>('/:id/sources', async (request, reply) => {
