@@ -8,51 +8,103 @@
       @dragleave="dragover = false"
       @drop.prevent="onDrop"
     >
-      <p>Drop video files here</p>
-      <input ref="fileInput" type="file" accept="video/*" multiple @change="onFileSelect" />
+      <p>Drop media files here</p>
+      <input ref="fileInput" type="file" accept="video/*,image/*,audio/*" multiple @change="onFileSelect" />
       <button @click="($refs.fileInput as HTMLInputElement).click()">Browse</button>
     </div>
     <div v-if="uploading" class="uploading">Uploading...</div>
-    <ul class="source-list">
-      <li
-        v-for="source in sources"
-        :key="source.id"
-        draggable="true"
-        @dragstart="onDragStart($event, source.id)"
-        @mouseenter="startHoverPreview(source.id)"
-        @mouseleave="stopHoverPreview(source.id)"
-      >
-        <div class="thumb-wrapper">
-          <img
-            :src="getThumbSrc(source.id)"
-            :alt="source.filename"
-            class="thumb"
-            @error="onThumbError($event)"
-          />
-        </div>
-        <div class="source-info">
-          <span class="filename">{{ source.filename }}</span>
-          <span class="duration">{{ formatDuration(source.duration) }}</span>
-        </div>
-        <div class="source-actions">
-          <button
-            class="small add-btn"
-            title="Add to timeline"
-            @click="$emit('addToTimeline', source.id)"
-          >
-            +
-          </button>
-          <button class="small delete-btn" title="Remove source" @click="removeSource(source.id)">
-            &times;
-          </button>
-        </div>
-      </li>
-    </ul>
+
+    <!-- Video sources -->
+    <div v-if="videoSources.length" class="source-group">
+      <div class="group-header">Video</div>
+      <ul class="source-list">
+        <li
+          v-for="source in videoSources"
+          :key="source.id"
+          draggable="true"
+          @dragstart="onDragStart($event, source)"
+          @mouseenter="startHoverPreview(source.id)"
+          @mouseleave="stopHoverPreview(source.id)"
+        >
+          <div class="thumb-wrapper">
+            <img
+              :src="getThumbSrc(source.id)"
+              :alt="source.filename"
+              class="thumb"
+              @error="onThumbError($event)"
+            />
+          </div>
+          <div class="source-info">
+            <span class="filename">{{ source.filename }}</span>
+            <span class="duration">{{ formatDuration(source.duration) }}</span>
+          </div>
+          <div class="source-actions">
+            <button class="small add-btn" title="Add to timeline" @click="$emit('addToTimeline', source.id)">+</button>
+            <button class="small delete-btn" title="Remove source" @click="removeSource(source.id)">&times;</button>
+          </div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Image sources -->
+    <div v-if="imageSources.length" class="source-group">
+      <div class="group-header">Images</div>
+      <ul class="source-list">
+        <li
+          v-for="source in imageSources"
+          :key="source.id"
+          draggable="true"
+          @dragstart="onDragStart($event, source)"
+        >
+          <div class="thumb-wrapper">
+            <img
+              :src="getStreamSrc(source.id)"
+              :alt="source.filename"
+              class="thumb"
+              @error="onThumbError($event)"
+            />
+          </div>
+          <div class="source-info">
+            <span class="filename">{{ source.filename }}</span>
+            <span class="duration">Image</span>
+          </div>
+          <div class="source-actions">
+            <button class="small add-btn" title="Add to timeline" @click="$emit('addToTimeline', source.id)">+</button>
+            <button class="small delete-btn" title="Remove source" @click="removeSource(source.id)">&times;</button>
+          </div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Audio sources -->
+    <div v-if="audioSources.length" class="source-group">
+      <div class="group-header">Audio</div>
+      <ul class="source-list">
+        <li
+          v-for="source in audioSources"
+          :key="source.id"
+          draggable="true"
+          @dragstart="onDragStart($event, source)"
+        >
+          <div class="thumb-wrapper audio-thumb">
+            <span class="audio-icon">&#9835;</span>
+          </div>
+          <div class="source-info">
+            <span class="filename">{{ source.filename }}</span>
+            <span class="duration">{{ formatDuration(source.duration) }}</span>
+          </div>
+          <div class="source-actions">
+            <button class="small add-btn" title="Add to timeline" @click="$emit('addToTimeline', source.id)">+</button>
+            <button class="small delete-btn" title="Remove source" @click="removeSource(source.id)">&times;</button>
+          </div>
+        </li>
+      </ul>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue';
+import { ref, reactive, computed } from 'vue';
 import type { SourceFile } from '@video-editor/shared';
 import * as api from '../api/client';
 
@@ -77,9 +129,17 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const hoverIndices = reactive<Record<string, number>>({});
 const hoverTimers = new Map<string, ReturnType<typeof setInterval>>();
 
+const videoSources = computed(() => props.sources.filter((s) => (s.type ?? 'video') === 'video'));
+const imageSources = computed(() => props.sources.filter((s) => s.type === 'image'));
+const audioSources = computed(() => props.sources.filter((s) => s.type === 'audio'));
+
 function getThumbSrc(sourceId: string): string {
   const index = hoverIndices[sourceId] ?? 1;
   return api.getThumbnailUrl(props.projectId, sourceId, index);
+}
+
+function getStreamSrc(sourceId: string): string {
+  return api.getStreamUrl(props.projectId, sourceId);
 }
 
 function startHoverPreview(sourceId: string) {
@@ -139,8 +199,9 @@ async function removeSource(sourceId: string) {
   emit('removeSource', sourceId);
 }
 
-function onDragStart(e: DragEvent, sourceId: string) {
-  e.dataTransfer?.setData('sourceId', sourceId);
+function onDragStart(e: DragEvent, source: SourceFile) {
+  e.dataTransfer?.setData('sourceId', source.id);
+  e.dataTransfer?.setData('sourceType', source.type ?? 'video');
 }
 
 function formatDuration(seconds: number): string {
@@ -191,6 +252,20 @@ h3 {
   margin-bottom: 8px;
 }
 
+.source-group {
+  margin-bottom: 8px;
+}
+
+.group-header {
+  font-size: 11px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 0;
+  border-bottom: 1px solid #333;
+  margin-bottom: 4px;
+}
+
 .source-list {
   list-style: none;
 }
@@ -221,6 +296,15 @@ h3 {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.thumb-wrapper.audio-thumb {
+  background: #1a2a4a;
+}
+
+.audio-icon {
+  font-size: 24px;
+  color: #6c63ff;
 }
 
 .thumb {

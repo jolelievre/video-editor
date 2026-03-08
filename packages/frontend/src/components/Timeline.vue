@@ -5,12 +5,15 @@
         <button class="play-btn" @click="$emit('togglePlay')">
           {{ isPlaying ? '\u23F8' : '\u25B6' }}
         </button>
+        <button class="cut-btn" title="Cut clip at playhead (C)" @click="$emit('cut')">
+          &#9986;
+        </button>
         <span>Timeline</span>
       </div>
       <div class="zoom-controls">
-        <button @click="tl.setZoom(tl.zoomLevel.value - 10)">-</button>
-        <span class="zoom-label">{{ tl.zoomLevel.value }}px/s</span>
-        <button @click="tl.setZoom(tl.zoomLevel.value + 10)">+</button>
+        <button @click="tl.setZoom(tl.zoomLevel.value - zoomStep)">-</button>
+        <span class="zoom-label">{{ zoomPercent }}%</span>
+        <button @click="tl.setZoom(tl.zoomLevel.value + zoomStep)">+</button>
       </div>
     </div>
     <div
@@ -37,8 +40,18 @@
         <div v-if="config.timeline.tracks.length === 0" class="empty-track">
           Drop a source here to start
         </div>
-        <div v-for="track in config.timeline.tracks" :key="track.id" class="track">
+        <div
+          v-for="track in config.timeline.tracks"
+          :key="track.id"
+          class="track"
+          :class="{
+            'audio-track': (track.type ?? 'video') === 'audio',
+            'selected-track': track.id === store.selectedTrackId,
+          }"
+          @mousedown="store.selectTrack(track.id)"
+        >
           <div class="track-label">
+            <span v-if="(track.type ?? 'video') === 'audio'" class="track-icon">&#9835;</span>
             {{ track.name }}
           </div>
           <div class="track-clips">
@@ -47,13 +60,16 @@
               :key="clip.id"
               :clip="clip"
               :track-clips="track.clips"
+              :track-type="track.type ?? 'video'"
               :source="config.sources.find((s) => s.id === clip.sourceId)"
               :zoom="tl.zoomLevel.value"
               :active="clip.id === activeClipId"
+              :selected="clip.id === store.selectedClipId"
               :project-id="config.id"
               @move="store.moveClip(clip.id, $event, tl.zoomLevel.value)"
               @trim="onTrim(track.clips, clip, $event)"
               @remove="$emit('removeClip', clip.id)"
+              @select="store.selectClip(clip.id)"
             />
           </div>
         </div>
@@ -80,14 +96,27 @@ const emit = defineEmits<{
   removeClip: [clipId: string];
   seek: [time: number];
   togglePlay: [];
+  cut: [];
 }>();
 
 const store = useProjectStore();
 const scrollContainer = ref<HTMLElement | null>(null);
 
+const DEFAULT_ZOOM = 50;
+
+const zoomPercent = computed(() => Math.round((props.tl.zoomLevel.value / DEFAULT_ZOOM) * 100));
+
+const zoomStep = computed(() => {
+  const z = props.tl.zoomLevel.value;
+  if (z <= 5) return 1;
+  if (z <= 20) return 5;
+  return 10;
+});
+
 const ticks = computed(() => {
   const total = Math.ceil(props.tl.totalDuration.value) + 5;
-  const step = props.tl.zoomLevel.value >= 50 ? 1 : props.tl.zoomLevel.value >= 20 ? 5 : 10;
+  const z = props.tl.zoomLevel.value;
+  const step = z >= 50 ? 1 : z >= 20 ? 5 : z >= 5 ? 10 : 30;
   const result: number[] = [];
   for (let i = 0; i <= total; i += step) {
     result.push(i);
@@ -218,6 +247,20 @@ watch(
   background: #3d5a8a;
 }
 
+.cut-btn {
+  padding: 2px 10px;
+  font-size: 16px;
+  background: #2d4a7a;
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+}
+
+.cut-btn:hover {
+  background: #3d5a8a;
+}
+
 .zoom-controls {
   display: flex;
   align-items: center;
@@ -290,6 +333,19 @@ watch(
   min-height: 58px;
 }
 
+.track.audio-track {
+  background: rgba(108, 99, 255, 0.05);
+}
+
+.track.selected-track {
+  outline: 1px solid #6c63ff;
+  outline-offset: -1px;
+}
+
+.track.selected-track .track-label {
+  color: #6c63ff;
+}
+
 .track-label {
   width: 80px;
   margin-left: -80px;
@@ -299,6 +355,16 @@ watch(
   background: #0f0f23;
   display: flex;
   align-items: center;
+  gap: 4px;
+}
+
+.audio-track .track-label {
+  background: #0f0f2a;
+}
+
+.track-icon {
+  font-size: 14px;
+  color: #6c63ff;
 }
 
 .track-clips {

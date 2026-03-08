@@ -7,10 +7,14 @@ import * as api from '../api/client';
 // Pixel threshold past a neighbor before reorder triggers (adjusted via zoom)
 export const REORDER_THRESHOLD_PX = 80;
 
+const IMAGE_DEFAULT_DURATION = 5;
+
 export const useProjectStore = defineStore('project', () => {
   const config = ref<ProjectConfig | null>(null);
   const loading = ref(false);
   const saving = ref(false);
+  const selectedClipId = ref<string | null>(null);
+  const selectedTrackId = ref<string | null>(null);
 
   let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -38,32 +42,52 @@ export const useProjectStore = defineStore('project', () => {
     saveTimeout = setTimeout(() => save(), 500);
   }
 
+  function getOrCreateTrack(type: 'video' | 'audio') {
+    if (!config.value) return null;
+
+    let track = config.value.timeline.tracks.find((t) => (t.type ?? 'video') === type);
+    if (!track) {
+      track = {
+        id: uuidv4(),
+        name: type === 'audio' ? 'Audio' : 'Video',
+        type,
+        clips: [],
+      };
+      if (type === 'audio') {
+        config.value.timeline.tracks.push(track);
+      } else {
+        config.value.timeline.tracks.unshift(track);
+      }
+    }
+    return track;
+  }
+
   function addClipToTimeline(sourceId: string) {
     if (!config.value) return;
     const source = config.value.sources.find((s) => s.id === sourceId);
     if (!source) return;
 
-    // Ensure at least one track exists
-    if (config.value.timeline.tracks.length === 0) {
-      config.value.timeline.tracks.push({
-        id: uuidv4(),
-        name: 'Track 1',
-        clips: [],
-      });
-    }
+    const sourceType = source.type ?? 'video';
+    const trackType = sourceType === 'audio' ? 'audio' : 'video';
+    const track = getOrCreateTrack(trackType);
+    if (!track) return;
 
-    const track = config.value.timeline.tracks[0];
     const lastClip = track.clips[track.clips.length - 1];
     const timelineStart = lastClip
       ? lastClip.timelineStart + (lastClip.outPoint - lastClip.inPoint)
       : 0;
 
+    const duration = sourceType === 'image' ? IMAGE_DEFAULT_DURATION : source.duration;
+
     const clip: Clip = {
       id: uuidv4(),
       sourceId,
       inPoint: 0,
-      outPoint: source.duration,
+      outPoint: duration,
       timelineStart,
+      volume: 1,
+      fadeIn: 0,
+      fadeOut: 0,
     };
 
     track.clips.push(clip);
@@ -76,6 +100,9 @@ export const useProjectStore = defineStore('project', () => {
       const idx = track.clips.findIndex((c) => c.id === clipId);
       if (idx !== -1) {
         track.clips.splice(idx, 1);
+        if (selectedClipId.value === clipId) {
+          selectedClipId.value = null;
+        }
         debouncedSave();
         return;
       }
@@ -92,6 +119,23 @@ export const useProjectStore = defineStore('project', () => {
         return;
       }
     }
+  }
+
+  function selectClip(clipId: string | null) {
+    selectedClipId.value = clipId;
+    // Also select the track containing this clip
+    if (clipId && config.value) {
+      for (const track of config.value.timeline.tracks) {
+        if (track.clips.some((c) => c.id === clipId)) {
+          selectedTrackId.value = track.id;
+          return;
+        }
+      }
+    }
+  }
+
+  function selectTrack(trackId: string | null) {
+    selectedTrackId.value = trackId;
   }
 
   function getClipEnd(clip: Clip): number {
@@ -152,16 +196,68 @@ export const useProjectStore = defineStore('project', () => {
     }
   }
 
+  function splitClipAtPlayhead(playheadTime: number): boolean {
+    if (!config.value) return false;
+
+    // Only cut on the selected track, fall back to first match
+    const tracks = selectedTrackId.value
+      ? config.value.timeline.tracks.filter((t) => t.id === selectedTrackId.value)
+      : config.value.timeline.tracks;
+
+    for (const track of tracks) {
+      for (const clip of track.clips) {
+        const clipEnd = clip.timelineStart + (clip.outPoint - clip.inPoint);
+        // Check if playhead is within this clip (not at edges)
+        if (
+          playheadTime > clip.timelineStart + 0.01 &&
+          playheadTime < clipEnd - 0.01
+        ) {
+          const offsetInClip = playheadTime - clip.timelineStart;
+          const splitSourceTime = clip.inPoint + offsetInClip;
+
+          // Create the right half
+          const rightClip: Clip = {
+            id: uuidv4(),
+            sourceId: clip.sourceId,
+            inPoint: Math.round(splitSourceTime * 100) / 100,
+            outPoint: clip.outPoint,
+            timelineStart: Math.round(playheadTime * 100) / 100,
+            volume: clip.volume ?? 1,
+            fadeIn: 0,
+            fadeOut: clip.fadeOut ?? 0,
+          };
+
+          // Trim the left half (original clip)
+          clip.outPoint = Math.round(splitSourceTime * 100) / 100;
+          clip.fadeOut = 0;
+
+          // Insert right clip after the original
+          const idx = track.clips.indexOf(clip);
+          track.clips.splice(idx + 1, 0, rightClip);
+
+          debouncedSave();
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   return {
     config,
     loading,
     saving,
+    selectedClipId,
+    selectedTrackId,
     load,
     save,
     debouncedSave,
     addClipToTimeline,
     removeClip,
     updateClip,
+    selectClip,
+    selectTrack,
     moveClip,
+    splitClipAtPlayhead,
   };
 });

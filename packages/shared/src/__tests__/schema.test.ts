@@ -118,16 +118,60 @@ describe('trackSchema', () => {
 });
 
 describe('sourceFileSchema', () => {
-  it('rejects zero duration', () => {
+  it('accepts zero duration for images', () => {
+    const result = sourceFileSchema.safeParse({
+      id: 'source-1',
+      filename: 'photo.png',
+      path: 'media/photo.png',
+      type: 'image',
+      duration: 0,
+      width: 1920,
+      height: 1080,
+      fps: 0,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects negative duration', () => {
     const result = sourceFileSchema.safeParse({
       id: 'source-1',
       filename: 'video.mp4',
       path: 'media/video.mp4',
-      duration: 0,
+      duration: -1,
       width: 1920,
       height: 1080,
       fps: 30,
     });
     expect(result.success).toBe(false);
+  });
+
+  it('accepts audio source with zero width/height', () => {
+    const result = sourceFileSchema.safeParse({
+      id: 'source-2',
+      filename: 'music.mp3',
+      path: 'media/music.mp3',
+      type: 'audio',
+      duration: 120,
+      width: 0,
+      height: 0,
+      fps: 0,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('defaults type to video when not provided', () => {
+    const result = sourceFileSchema.safeParse({
+      id: 'source-1',
+      filename: 'video.mp4',
+      path: 'media/video.mp4',
+      duration: 60,
+      width: 1920,
+      height: 1080,
+      fps: 30,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.type).toBe('video');
+    }
   });
 });

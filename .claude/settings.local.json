@@ -13,7 +13,8 @@
       "Bash(npx:*)",
       "Bash(ffprobe:*)",
       "Bash(mkdir -p /tmp/test_thumbs)",
-      "Bash(ffmpeg -i \"/Users/jonathanlelievre/www/video-editor/data/projects/e5d1e30f-4c74-4ae0-991e-0433a921118a/media/715d10ab-689f-4159-acb5-080e93454366.mp4\" -vf \"select=''eq\\(n,0\\)'',scale=192:-1\" -vframes 1 -y /tmp/test_thumbs/test.jpg)"
+      "Bash(ffmpeg -i \"/Users/jonathanlelievre/www/video-editor/data/projects/e5d1e30f-4c74-4ae0-991e-0433a921118a/media/715d10ab-689f-4159-acb5-080e93454366.mp4\" -vf \"select=''eq\\(n,0\\)'',scale=192:-1\" -vframes 1 -y /tmp/test_thumbs/test.jpg)",
+      "Bash(GH_TOKEN=$CLAUDE_GH_TOKEN git push:*)"
     ]
   }
 }

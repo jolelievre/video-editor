@@ -30,7 +30,17 @@ export function useTimeline(config: () => ProjectConfig | null) {
   }
 
   function setZoom(level: number) {
-    zoomLevel.value = Math.max(10, Math.min(200, level));
+    zoomLevel.value = Math.max(2, Math.min(200, level));
+  }
+
+  function fitToWidth(containerWidth: number) {
+    const duration = totalDuration.value;
+    if (duration <= 0 || containerWidth <= 0) return;
+    // Leave some padding (80px track label + 120px margin)
+    const availableWidth = containerWidth - 200;
+    if (availableWidth <= 0) return;
+    const ideal = availableWidth / duration;
+    setZoom(Math.round(ideal));
   }
 
   return {
@@ -42,6 +52,7 @@ export function useTimeline(config: () => ProjectConfig | null) {
     timeToPixels,
     pixelsToTime,
     setZoom,
+    fitToWidth,
   };
 }
 
