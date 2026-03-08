@@ -199,8 +199,8 @@ h3 {
 }
 
 .thumb-wrapper {
-  width: 64px;
-  height: 36px;
+  width: 80px;
+  height: 45px;
   flex-shrink: 0;
   background: #0a0a1a;
   border-radius: 3px;

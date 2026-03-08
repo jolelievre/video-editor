@@ -50,6 +50,7 @@
               :source="config.sources.find((s) => s.id === clip.sourceId)"
               :zoom="tl.zoomLevel.value"
               :active="clip.id === activeClipId"
+              :project-id="config.id"
               @move="store.moveClip(clip.id, $event, tl.zoomLevel.value)"
               @trim="onTrim(track.clips, clip, $event)"
               @remove="$emit('removeClip', clip.id)"
@@ -286,7 +287,7 @@ watch(
 .track {
   display: flex;
   border-bottom: 1px solid #222;
-  min-height: 50px;
+  min-height: 58px;
 }
 
 .track-label {
@@ -303,6 +304,6 @@ watch(
 .track-clips {
   flex: 1;
   position: relative;
-  min-height: 50px;
+  min-height: 58px;
 }
 </style>

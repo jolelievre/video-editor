@@ -37,29 +37,28 @@ function probeHasAudio(filePath: string): Promise<boolean> {
   });
 }
 
-export function generateThumbnails(
+export async function generateThumbnails(
   inputPath: string,
   outputDir: string,
   count: number,
   duration: number,
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timestamps: string[] = [];
-    for (let i = 0; i < count; i++) {
-      const time = count === 1 ? 0 : (duration * i) / (count - 1);
-      timestamps.push(time.toFixed(2));
-    }
-
-    ffmpeg(inputPath)
-      .screenshots({
-        timestamps,
-        filename: 'thumb_%i.jpg',
-        folder: outputDir,
-        size: '192x?',
-      })
-      .on('end', () => resolve())
-      .on('error', (err) => reject(err));
-  });
+  const maxTime = Math.max(0, duration - 0.1);
+  for (let i = 0; i < count; i++) {
+    const time = count === 1 ? 0 : (maxTime * i) / (count - 1);
+    const outputPath = join(outputDir, `thumb_${i + 1}.jpg`);
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn('ffmpeg', [
+        '-ss', time.toFixed(2),
+        '-i', inputPath,
+        '-vframes', '1',
+        '-vf', 'scale=192:-2',
+        '-y', outputPath,
+      ]);
+      proc.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exit ${code}`))));
+      proc.on('error', reject);
+    });
+  }
 }
 
 function parseTimemark(timemark: string): number {
