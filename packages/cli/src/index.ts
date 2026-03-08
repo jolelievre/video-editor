@@ -45,9 +45,7 @@ program
       process.exit(1);
     }
 
-    console.log(
-      `Exporting ${config.timeline.tracks.flatMap((t) => t.clips).length} clip(s)...`,
-    );
+    console.log(`Exporting ${config.timeline.tracks.flatMap((t) => t.clips).length} clip(s)...`);
 
     let lastPercent = -1;
     await startExport(config, {

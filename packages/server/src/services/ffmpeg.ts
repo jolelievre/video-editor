@@ -49,13 +49,20 @@ export async function generateThumbnails(
     const outputPath = join(outputDir, `thumb_${i + 1}.jpg`);
     await new Promise<void>((resolve, reject) => {
       const proc = spawn('ffmpeg', [
-        '-ss', time.toFixed(2),
-        '-i', inputPath,
-        '-vframes', '1',
-        '-vf', 'scale=192:-2',
-        '-y', outputPath,
+        '-ss',
+        time.toFixed(2),
+        '-i',
+        inputPath,
+        '-vframes',
+        '1',
+        '-vf',
+        'scale=192:-2',
+        '-y',
+        outputPath,
       ]);
-      proc.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exit ${code}`))));
+      proc.on('close', (code) =>
+        code === 0 ? resolve() : reject(new Error(`ffmpeg exit ${code}`)),
+      );
       proc.on('error', reject);
     });
   }
@@ -139,20 +146,14 @@ export async function startExport(
       } else {
         aLabel = `sa${i}`;
         const clipDuration = inputs[i].clip.outPoint - inputs[i].clip.inPoint;
-        filterParts.push(
-          `anullsrc=channel_layout=stereo:sample_rate=48000[${aLabel}_raw]`,
-        );
-        filterParts.push(
-          `[${aLabel}_raw]atrim=0:${clipDuration}[${aLabel}]`,
-        );
+        filterParts.push(`anullsrc=channel_layout=stereo:sample_rate=48000[${aLabel}_raw]`);
+        filterParts.push(`[${aLabel}_raw]atrim=0:${clipDuration}[${aLabel}]`);
       }
 
       concatInputs.push(`[${vLabel}][${aLabel}]`);
     }
 
-    filterParts.push(
-      `${concatInputs.join('')}concat=n=${inputs.length}:v=1:a=1[outv][outa]`,
-    );
+    filterParts.push(`${concatInputs.join('')}concat=n=${inputs.length}:v=1:a=1[outv][outa]`);
 
     args.push('-filter_complex', filterParts.join(';'));
     args.push('-map', '[outv]', '-map', '[outa]');

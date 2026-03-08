@@ -17,6 +17,7 @@
           :sources="store.config.sources"
           @uploaded="onSourceUploaded"
           @add-to-timeline="store.addClipToTimeline($event)"
+          @remove-source="onSourceRemoved"
         />
       </div>
       <div class="right-panel">
@@ -84,6 +85,11 @@ function onSourceUploaded(source: SourceFile) {
     store.config.sources.push(source);
     store.debouncedSave();
   }
+}
+
+function onSourceRemoved() {
+  // Reload config from server (which already removed source, file, and related clips)
+  store.load(route.params.id as string);
 }
 </script>
 

@@ -65,7 +65,10 @@ const visibleThumbs = computed(() => {
     // Map the clip's in/out range to the source duration
     const clipTime = props.clip.inPoint + fraction * (props.clip.outPoint - props.clip.inPoint);
     const sourceFraction = props.source.duration > 0 ? clipTime / props.source.duration : 0;
-    const thumbIndex = Math.min(THUMB_COUNT, Math.max(1, Math.round(sourceFraction * (THUMB_COUNT - 1)) + 1));
+    const thumbIndex = Math.min(
+      THUMB_COUNT,
+      Math.max(1, Math.round(sourceFraction * (THUMB_COUNT - 1)) + 1),
+    );
     result.push({
       index: thumbIndex,
       url: getThumbnailUrl(props.projectId, props.source.id, thumbIndex),
@@ -153,7 +156,6 @@ function formatDuration(seconds: number): string {
   min-width: 20px;
   border: 1px solid transparent;
   transition: border-color 0.15s;
-  overflow: hidden;
 }
 
 .clip:hover {

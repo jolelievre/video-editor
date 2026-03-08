@@ -35,8 +35,15 @@
           <span class="duration">{{ formatDuration(source.duration) }}</span>
         </div>
         <div class="source-actions">
-          <button class="small" title="Add to timeline" @click="$emit('addToTimeline', source.id)">
+          <button
+            class="small add-btn"
+            title="Add to timeline"
+            @click="$emit('addToTimeline', source.id)"
+          >
             +
+          </button>
+          <button class="small delete-btn" title="Remove source" @click="removeSource(source.id)">
+            &times;
           </button>
         </div>
       </li>
@@ -60,6 +67,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   uploaded: [source: SourceFile];
   addToTimeline: [sourceId: string];
+  removeSource: [sourceId: string];
 }>();
 
 const dragover = ref(false);
@@ -124,6 +132,11 @@ function onFileSelect(e: Event) {
     uploadFiles(input.files);
     input.value = '';
   }
+}
+
+async function removeSource(sourceId: string) {
+  await api.deleteSource(props.projectId, sourceId);
+  emit('removeSource', sourceId);
 }
 
 function onDragStart(e: DragEvent, sourceId: string) {
@@ -235,9 +248,24 @@ h3 {
   color: #888;
 }
 
+.source-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
 .small {
   padding: 2px 8px;
   font-size: 14px;
   font-weight: bold;
+}
+
+.delete-btn {
+  color: #ff6b6b;
+}
+
+.delete-btn:hover {
+  background: #ff4444;
+  color: white;
 }
 </style>
