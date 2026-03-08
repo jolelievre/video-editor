@@ -50,7 +50,7 @@
               :source="config.sources.find((s) => s.id === clip.sourceId)"
               :zoom="tl.zoomLevel.value"
               :active="clip.id === activeClipId"
-              @move="store.moveClip(clip.id, $event)"
+              @move="store.moveClip(clip.id, $event, tl.zoomLevel.value)"
               @trim="onTrim(track.clips, clip, $event)"
               @remove="$emit('removeClip', clip.id)"
             />

@@ -19,9 +19,21 @@
         :key="source.id"
         draggable="true"
         @dragstart="onDragStart($event, source.id)"
+        @mouseenter="startHoverPreview(source.id)"
+        @mouseleave="stopHoverPreview(source.id)"
       >
-        <span class="filename">{{ source.filename }}</span>
-        <span class="duration">{{ formatDuration(source.duration) }}</span>
+        <div class="thumb-wrapper">
+          <img
+            :src="getThumbSrc(source.id)"
+            :alt="source.filename"
+            class="thumb"
+            @error="onThumbError($event)"
+          />
+        </div>
+        <div class="source-info">
+          <span class="filename">{{ source.filename }}</span>
+          <span class="duration">{{ formatDuration(source.duration) }}</span>
+        </div>
         <div class="source-actions">
           <button class="small" title="Add to timeline" @click="$emit('addToTimeline', source.id)">
             +
@@ -33,9 +45,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, reactive } from 'vue';
 import type { SourceFile } from '@video-editor/shared';
 import * as api from '../api/client';
+
+const THUMB_COUNT = 6;
+const HOVER_INTERVAL_MS = 600;
 
 const props = defineProps<{
   projectId: string;
@@ -50,6 +65,39 @@ const emit = defineEmits<{
 const dragover = ref(false);
 const uploading = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
+
+const hoverIndices = reactive<Record<string, number>>({});
+const hoverTimers = new Map<string, ReturnType<typeof setInterval>>();
+
+function getThumbSrc(sourceId: string): string {
+  const index = hoverIndices[sourceId] ?? 1;
+  return api.getThumbnailUrl(props.projectId, sourceId, index);
+}
+
+function startHoverPreview(sourceId: string) {
+  if (hoverTimers.has(sourceId)) return;
+  let index = 1;
+  hoverIndices[sourceId] = index;
+  const timer = setInterval(() => {
+    index = (index % THUMB_COUNT) + 1;
+    hoverIndices[sourceId] = index;
+  }, HOVER_INTERVAL_MS);
+  hoverTimers.set(sourceId, timer);
+}
+
+function stopHoverPreview(sourceId: string) {
+  const timer = hoverTimers.get(sourceId);
+  if (timer) {
+    clearInterval(timer);
+    hoverTimers.delete(sourceId);
+  }
+  hoverIndices[sourceId] = 1;
+}
+
+function onThumbError(e: Event) {
+  const img = e.target as HTMLImageElement;
+  img.style.display = 'none';
+}
 
 async function uploadFiles(files: FileList) {
   uploading.value = true;
@@ -138,7 +186,7 @@ h3 {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px;
+  padding: 6px 8px;
   background: #16213e;
   border-radius: 4px;
   margin-bottom: 4px;
@@ -150,8 +198,33 @@ h3 {
   background: #1a1a4e;
 }
 
-.filename {
+.thumb-wrapper {
+  width: 64px;
+  height: 36px;
+  flex-shrink: 0;
+  background: #0a0a1a;
+  border-radius: 3px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.source-info {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.filename {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

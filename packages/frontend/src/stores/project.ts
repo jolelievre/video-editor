@@ -4,6 +4,9 @@ import { v4 as uuidv4 } from 'uuid';
 import type { ProjectConfig, Clip } from '@video-editor/shared';
 import * as api from '../api/client';
 
+// Pixel threshold past a neighbor before reorder triggers (adjusted via zoom)
+export const REORDER_THRESHOLD_PX = 80;
+
 export const useProjectStore = defineStore('project', () => {
   const config = ref<ProjectConfig | null>(null);
   const loading = ref(false);
@@ -91,25 +94,57 @@ export const useProjectStore = defineStore('project', () => {
     }
   }
 
-  function moveClip(clipId: string, newTimelineStart: number) {
+  function getClipEnd(clip: Clip): number {
+    return clip.timelineStart + (clip.outPoint - clip.inPoint);
+  }
+
+  function moveClip(clipId: string, desiredStart: number, zoom: number) {
     if (!config.value) return;
     for (const track of config.value.timeline.tracks) {
       const clip = track.clips.find((c) => c.id === clipId);
       if (!clip) continue;
 
-      clip.timelineStart = Math.round(Math.max(0, newTimelineStart) * 100) / 100;
+      const clipDuration = clip.outPoint - clip.inPoint;
+      const desiredEnd = desiredStart + clipDuration;
+      const thresholdTime = REORDER_THRESHOLD_PX / zoom;
 
-      // Sort clips by timelineStart
-      track.clips.sort((a, b) => a.timelineStart - b.timelineStart);
+      // Find neighbors (based on current sort order)
+      const sorted = [...track.clips].sort((a, b) => a.timelineStart - b.timelineStart);
+      const currentIdx = sorted.findIndex((c) => c.id === clipId);
+      const prev = currentIdx > 0 ? sorted[currentIdx - 1] : null;
+      const next = currentIdx < sorted.length - 1 ? sorted[currentIdx + 1] : null;
 
-      // Push overlapping clips to the right
-      for (let i = 0; i < track.clips.length - 1; i++) {
-        const current = track.clips[i];
-        const currentEnd = current.timelineStart + (current.outPoint - current.inPoint);
-        const next = track.clips[i + 1];
-        if (next.timelineStart < currentEnd) {
-          next.timelineStart = Math.round(currentEnd * 100) / 100;
+      const prevEnd = prev ? getClipEnd(prev) : 0;
+      const nextStart = next ? next.timelineStart : Infinity;
+
+      // Check if dragging past threshold to reorder
+      const pastPrevThreshold = prev && desiredStart < prev.timelineStart - thresholdTime;
+      const pastNextThreshold = next && desiredEnd > getClipEnd(next) + thresholdTime;
+
+      if (pastPrevThreshold || pastNextThreshold) {
+        // Reorder: place clip at desired position, sort, resolve overlaps
+        clip.timelineStart = Math.round(Math.max(0, desiredStart) * 100) / 100;
+        track.clips.sort((a, b) => a.timelineStart - b.timelineStart);
+
+        // Push overlapping clips to the right
+        for (let i = 0; i < track.clips.length - 1; i++) {
+          const current = track.clips[i];
+          const currentEnd = getClipEnd(current);
+          const nextClip = track.clips[i + 1];
+          if (nextClip.timelineStart < currentEnd) {
+            nextClip.timelineStart = Math.round(currentEnd * 100) / 100;
+          }
         }
+      } else {
+        // Constrained move: clamp between neighbors
+        let clamped = Math.max(0, desiredStart);
+        if (prev) {
+          clamped = Math.max(prevEnd, clamped);
+        }
+        if (next) {
+          clamped = Math.min(nextStart - clipDuration, clamped);
+        }
+        clip.timelineStart = Math.round(Math.max(0, clamped) * 100) / 100;
       }
 
       debouncedSave();
