@@ -2,8 +2,19 @@
   <div class="clip" :class="{ selected, active }" :style="clipStyle" @mousedown.stop="onSelect">
     <div class="handle left" @mousedown.stop="startTrim('in', $event)" />
     <div class="clip-body" @mousedown.stop="startDrag($event)">
-      <span class="clip-label">{{ source?.filename ?? 'Unknown' }}</span>
-      <span class="clip-duration">{{ formatDuration(clip.outPoint - clip.inPoint) }}</span>
+      <div class="thumb-strip">
+        <img
+          v-for="thumb in visibleThumbs"
+          :key="thumb.index"
+          :src="thumb.url"
+          class="thumb"
+          draggable="false"
+        />
+      </div>
+      <div class="clip-overlay">
+        <span class="clip-label">{{ source?.filename ?? 'Unknown' }}</span>
+        <span class="clip-duration">{{ formatDuration(clip.outPoint - clip.inPoint) }}</span>
+      </div>
     </div>
     <div class="handle right" @mousedown.stop="startTrim('out', $event)" />
     <button class="remove-btn" @click.stop="$emit('remove')">&times;</button>
@@ -13,6 +24,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import type { Clip, SourceFile } from '@video-editor/shared';
+import { getThumbnailUrl } from '../api/client';
+
+const THUMB_WIDTH = 80;
+const THUMB_COUNT = 6;
 
 const props = defineProps<{
   clip: Clip;
@@ -20,40 +35,48 @@ const props = defineProps<{
   source: SourceFile | undefined;
   zoom: number;
   active: boolean;
+  projectId: string;
 }>();
 
 const emit = defineEmits<{
-  update: [changes: Partial<Clip>];
+  move: [newTimelineStart: number];
   trim: [changes: Partial<Clip>];
   remove: [];
 }>();
 
 const selected = ref(false);
 
+const clipWidthPx = computed(() => (props.clip.outPoint - props.clip.inPoint) * props.zoom);
+
 const clipStyle = computed(() => ({
   left: `${props.clip.timelineStart * props.zoom}px`,
-  width: `${(props.clip.outPoint - props.clip.inPoint) * props.zoom}px`,
+  width: `${clipWidthPx.value}px`,
 }));
 
-function getSiblingBounds() {
-  const clipDuration = props.clip.outPoint - props.clip.inPoint;
-  const clipEnd = props.clip.timelineStart + clipDuration;
-  let prevEnd = 0;
-  let nextStart = Infinity;
+const visibleThumbs = computed(() => {
+  if (!props.source) return [];
+  const bodyWidth = Math.max(0, clipWidthPx.value - 12); // subtract handle widths
+  const count = Math.max(1, Math.floor(bodyWidth / THUMB_WIDTH));
+  const result: Array<{ index: number; url: string }> = [];
 
-  for (const other of props.trackClips) {
-    if (other.id === props.clip.id) continue;
-    const otherEnd = other.timelineStart + (other.outPoint - other.inPoint);
-    if (otherEnd <= props.clip.timelineStart + 0.01) {
-      prevEnd = Math.max(prevEnd, otherEnd);
-    }
-    if (other.timelineStart >= clipEnd - 0.01) {
-      nextStart = Math.min(nextStart, other.timelineStart);
-    }
+  for (let i = 0; i < count; i++) {
+    // Map position in the clip to a thumbnail index (1-based)
+    const fraction = count === 1 ? 0.5 : i / (count - 1);
+    // Map the clip's in/out range to the source duration
+    const clipTime = props.clip.inPoint + fraction * (props.clip.outPoint - props.clip.inPoint);
+    const sourceFraction = props.source.duration > 0 ? clipTime / props.source.duration : 0;
+    const thumbIndex = Math.min(
+      THUMB_COUNT,
+      Math.max(1, Math.round(sourceFraction * (THUMB_COUNT - 1)) + 1),
+    );
+    result.push({
+      index: thumbIndex,
+      url: getThumbnailUrl(props.projectId, props.source.id, thumbIndex),
+    });
   }
 
-  return { prevEnd, nextStart };
-}
+  return result;
+});
 
 function onSelect() {
   selected.value = true;
@@ -62,16 +85,11 @@ function onSelect() {
 function startDrag(e: MouseEvent) {
   const startX = e.clientX;
   const startPos = props.clip.timelineStart;
-  const clipDuration = props.clip.outPoint - props.clip.inPoint;
-  const { prevEnd, nextStart } = getSiblingBounds();
 
   function onMove(ev: MouseEvent) {
     const dx = ev.clientX - startX;
-    let newStart = startPos + dx / props.zoom;
-    newStart = Math.max(prevEnd, newStart);
-    newStart = Math.min(nextStart - clipDuration, newStart);
-    newStart = Math.max(0, newStart);
-    emit('update', { timelineStart: Math.round(newStart * 100) / 100 });
+    const newStart = Math.max(0, startPos + dx / props.zoom);
+    emit('move', Math.round(newStart * 100) / 100);
   }
 
   function onUp() {
@@ -128,11 +146,11 @@ function formatDuration(seconds: number): string {
 .clip {
   position: absolute;
   top: 4px;
-  height: 42px;
+  height: 48px;
   background: #2d4a7a;
   border-radius: 4px;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   cursor: grab;
   user-select: none;
   min-width: 20px;
@@ -156,29 +174,51 @@ function formatDuration(seconds: number): string {
 
 .handle {
   width: 6px;
-  height: 100%;
   cursor: ew-resize;
   flex-shrink: 0;
+  z-index: 2;
 }
 
 .handle.left {
   border-radius: 4px 0 0 4px;
-  background: rgba(108, 99, 255, 0.4);
+  background: rgba(108, 99, 255, 0.5);
 }
 
 .handle.right {
   border-radius: 0 4px 4px 0;
-  background: rgba(108, 99, 255, 0.4);
+  background: rgba(108, 99, 255, 0.5);
 }
 
 .clip-body {
   flex: 1;
   overflow: hidden;
-  padding: 0 4px;
+  min-width: 0;
+  position: relative;
+}
+
+.thumb-strip {
+  display: flex;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+}
+
+.thumb {
+  height: 100%;
+  flex: 1;
+  object-fit: cover;
+  min-width: 0;
+  pointer-events: none;
+}
+
+.clip-overlay {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-width: 0;
+  padding: 0 4px;
+  background: rgba(0, 0, 0, 0.35);
 }
 
 .clip-label {
@@ -186,11 +226,13 @@ function formatDuration(seconds: number): string {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 
 .clip-duration {
   font-size: 9px;
-  color: #aaa;
+  color: #ccc;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 
 .remove-btn {
@@ -208,6 +250,7 @@ function formatDuration(seconds: number): string {
   display: none;
   align-items: center;
   justify-content: center;
+  z-index: 3;
 }
 
 .clip:hover .remove-btn {

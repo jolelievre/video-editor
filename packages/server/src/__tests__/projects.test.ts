@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { rm } from 'node:fs/promises';
 import { buildApp } from '../app.js';
-import { DATA_DIR } from '../config.js';
+import { DATA_DIR } from '@video-editor/shared';
 
 describe('Project routes', () => {
   let app: Awaited<ReturnType<typeof buildApp>>;

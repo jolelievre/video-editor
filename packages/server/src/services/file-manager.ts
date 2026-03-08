@@ -1,9 +1,12 @@
-import { writeFile, unlink } from 'node:fs/promises';
+import { writeFile, unlink, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
 import ffmpeg from 'fluent-ffmpeg';
+import { DATA_DIR } from '@video-editor/shared';
 import type { SourceFile } from '@video-editor/shared';
-import { DATA_DIR } from '../config.js';
+import { generateThumbnails } from './ffmpeg.js';
+
+const THUMBNAIL_COUNT = 6;
 
 function mediaDir(projectId: string): string {
   return join(DATA_DIR, projectId, 'media');
@@ -53,6 +56,14 @@ export async function saveUpload(
   await writeFile(filePath, buffer);
 
   const probe = await probeFile(filePath);
+
+  // Generate thumbnails in background (don't block upload response)
+  const thumbDir = join(DATA_DIR, projectId, 'thumbs', id);
+  mkdir(thumbDir, { recursive: true })
+    .then(() => generateThumbnails(filePath, thumbDir, THUMBNAIL_COUNT, probe.duration))
+    .catch(() => {
+      // Thumbnails are non-critical; silently ignore errors
+    });
 
   return {
     id,

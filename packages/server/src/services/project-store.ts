@@ -2,9 +2,8 @@ import { readdir, readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
-import { projectConfigSchema } from '@video-editor/shared';
+import { projectConfigSchema, DATA_DIR } from '@video-editor/shared';
 import type { ProjectConfig } from '@video-editor/shared';
-import { DATA_DIR } from '../config.js';
 
 async function ensureDataDir() {
   if (!existsSync(DATA_DIR)) {
