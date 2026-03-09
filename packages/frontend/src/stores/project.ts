@@ -1,13 +1,14 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { v4 as uuidv4 } from 'uuid';
-import type { ProjectConfig, Clip } from '@video-editor/shared';
+import type { ProjectConfig, Clip, TextClip } from '@video-editor/shared';
 import * as api from '../api/client';
 
 // Pixel threshold past a neighbor before reorder triggers (adjusted via zoom)
 export const REORDER_THRESHOLD_PX = 80;
 
 const IMAGE_DEFAULT_DURATION = 5;
+const TEXT_DEFAULT_DURATION = 5;
 
 export const useProjectStore = defineStore('project', () => {
   const config = ref<ProjectConfig | null>(null);
@@ -52,6 +53,7 @@ export const useProjectStore = defineStore('project', () => {
         name: type === 'audio' ? 'Audio' : 'Video',
         type,
         clips: [],
+        textClips: [],
       };
       if (type === 'audio') {
         config.value.timeline.tracks.push(track);
@@ -123,10 +125,13 @@ export const useProjectStore = defineStore('project', () => {
 
   function selectClip(clipId: string | null) {
     selectedClipId.value = clipId;
-    // Also select the track containing this clip
     if (clipId && config.value) {
       for (const track of config.value.timeline.tracks) {
         if (track.clips.some((c) => c.id === clipId)) {
+          selectedTrackId.value = track.id;
+          return;
+        }
+        if ((track.textClips ?? []).some((c) => c.id === clipId)) {
           selectedTrackId.value = track.id;
           return;
         }
@@ -205,17 +210,13 @@ export const useProjectStore = defineStore('project', () => {
       : config.value.timeline.tracks;
 
     for (const track of tracks) {
+      // Try media clips
       for (const clip of track.clips) {
         const clipEnd = clip.timelineStart + (clip.outPoint - clip.inPoint);
-        // Check if playhead is within this clip (not at edges)
-        if (
-          playheadTime > clip.timelineStart + 0.01 &&
-          playheadTime < clipEnd - 0.01
-        ) {
+        if (playheadTime > clip.timelineStart + 0.01 && playheadTime < clipEnd - 0.01) {
           const offsetInClip = playheadTime - clip.timelineStart;
           const splitSourceTime = clip.inPoint + offsetInClip;
 
-          // Create the right half
           const rightClip: Clip = {
             id: uuidv4(),
             sourceId: clip.sourceId,
@@ -227,11 +228,9 @@ export const useProjectStore = defineStore('project', () => {
             fadeOut: clip.fadeOut ?? 0,
           };
 
-          // Trim the left half (original clip)
           clip.outPoint = Math.round(splitSourceTime * 100) / 100;
           clip.fadeOut = 0;
 
-          // Insert right clip after the original
           const idx = track.clips.indexOf(clip);
           track.clips.splice(idx + 1, 0, rightClip);
 
@@ -239,8 +238,178 @@ export const useProjectStore = defineStore('project', () => {
           return true;
         }
       }
+
+      // Try text clips
+      for (const tc of track.textClips ?? []) {
+        const tcEnd = tc.timelineStart + tc.duration;
+        if (playheadTime > tc.timelineStart + 0.01 && playheadTime < tcEnd - 0.01) {
+          const leftDuration = Math.round((playheadTime - tc.timelineStart) * 100) / 100;
+          const rightDuration = Math.round((tcEnd - playheadTime) * 100) / 100;
+
+          const rightClip: TextClip = {
+            id: uuidv4(),
+            content: tc.content,
+            timelineStart: Math.round(playheadTime * 100) / 100,
+            duration: rightDuration,
+            style: { ...tc.style },
+            position: { ...tc.position },
+          };
+
+          tc.duration = leftDuration;
+
+          const idx = track.textClips.indexOf(tc);
+          track.textClips.splice(idx + 1, 0, rightClip);
+
+          debouncedSave();
+          return true;
+        }
+      }
     }
     return false;
+  }
+
+  // --- Text track/clip actions ---
+
+  function addTextTrack() {
+    if (!config.value) return;
+    const textTracks = config.value.timeline.tracks.filter((t) => t.type === 'text');
+    const name = `Text ${textTracks.length + 1}`;
+    const track = {
+      id: uuidv4(),
+      name,
+      type: 'text' as const,
+      clips: [],
+      textClips: [],
+    };
+    // Insert text tracks at the top (above video tracks)
+    config.value.timeline.tracks.unshift(track);
+    debouncedSave();
+    return track;
+  }
+
+  function removeTrack(trackId: string) {
+    if (!config.value) return;
+    const idx = config.value.timeline.tracks.findIndex((t) => t.id === trackId);
+    if (idx === -1) return;
+    const track = config.value.timeline.tracks[idx];
+    if (track.type !== 'text') return;
+    if (track.textClips.length > 0 || track.clips.length > 0) return;
+    config.value.timeline.tracks.splice(idx, 1);
+    if (selectedTrackId.value === trackId) {
+      selectedTrackId.value = null;
+    }
+    debouncedSave();
+  }
+
+  function addTextClip(trackId: string, playheadTime?: number) {
+    if (!config.value) return;
+    const track = config.value.timeline.tracks.find((t) => t.id === trackId);
+    if (!track || track.type !== 'text') return;
+
+    const sorted = [...track.textClips].sort((a, b) => a.timelineStart - b.timelineStart);
+    let timelineStart: number | null = null;
+
+    // Try to place at playhead if there's room
+    if (playheadTime != null && playheadTime >= 0) {
+      const desiredEnd = playheadTime + TEXT_DEFAULT_DURATION;
+      let fits = true;
+      for (const tc of sorted) {
+        const tcEnd = tc.timelineStart + tc.duration;
+        // Overlap check
+        if (playheadTime < tcEnd && desiredEnd > tc.timelineStart) {
+          fits = false;
+          break;
+        }
+      }
+      if (fits) {
+        timelineStart = Math.round(playheadTime * 100) / 100;
+      }
+    }
+
+    // Fallback: place after the last clip
+    if (timelineStart == null) {
+      const lastTc = sorted[sorted.length - 1];
+      timelineStart = lastTc ? Math.round((lastTc.timelineStart + lastTc.duration) * 100) / 100 : 0;
+    }
+
+    const textClip: TextClip = {
+      id: uuidv4(),
+      content: 'Text',
+      timelineStart,
+      duration: TEXT_DEFAULT_DURATION,
+      style: {
+        fontFamily: 'Roboto',
+        fontSize: 48,
+        color: '#FFFFFF',
+        bold: false,
+        italic: false,
+      },
+      position: { x: 50, y: 50 },
+    };
+
+    track.textClips.push(textClip);
+    debouncedSave();
+  }
+
+  function updateTextClip(clipId: string, changes: Partial<TextClip>) {
+    if (!config.value) return;
+    for (const track of config.value.timeline.tracks) {
+      const tc = (track.textClips ?? []).find((c) => c.id === clipId);
+      if (tc) {
+        // Handle nested objects carefully
+        if (changes.style) {
+          tc.style = { ...tc.style, ...changes.style };
+          delete changes.style;
+        }
+        if (changes.position) {
+          tc.position = { ...tc.position, ...changes.position };
+          delete changes.position;
+        }
+        Object.assign(tc, changes);
+        debouncedSave();
+        return;
+      }
+    }
+  }
+
+  function removeTextClip(clipId: string) {
+    if (!config.value) return;
+    for (const track of config.value.timeline.tracks) {
+      const idx = (track.textClips ?? []).findIndex((c) => c.id === clipId);
+      if (idx !== -1) {
+        track.textClips.splice(idx, 1);
+        if (selectedClipId.value === clipId) {
+          selectedClipId.value = null;
+        }
+        debouncedSave();
+        return;
+      }
+    }
+  }
+
+  function moveTextClip(clipId: string, desiredStart: number) {
+    if (!config.value) return;
+    for (const track of config.value.timeline.tracks) {
+      const tc = (track.textClips ?? []).find((c) => c.id === clipId);
+      if (!tc) continue;
+
+      const sorted = [...track.textClips].sort((a, b) => a.timelineStart - b.timelineStart);
+      const idx = sorted.findIndex((c) => c.id === clipId);
+      const prev = idx > 0 ? sorted[idx - 1] : null;
+      const next = idx < sorted.length - 1 ? sorted[idx + 1] : null;
+
+      let clamped = Math.max(0, desiredStart);
+      if (prev) {
+        clamped = Math.max(prev.timelineStart + prev.duration, clamped);
+      }
+      if (next) {
+        clamped = Math.min(next.timelineStart - tc.duration, clamped);
+      }
+
+      tc.timelineStart = Math.round(Math.max(0, clamped) * 100) / 100;
+      debouncedSave();
+      return;
+    }
   }
 
   return {
@@ -259,5 +428,11 @@ export const useProjectStore = defineStore('project', () => {
     selectTrack,
     moveClip,
     splitClipAtPlayhead,
+    addTextTrack,
+    removeTrack,
+    addTextClip,
+    updateTextClip,
+    removeTextClip,
+    moveTextClip,
   };
 });

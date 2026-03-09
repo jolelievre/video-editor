@@ -12,7 +12,12 @@
       :viewBox="`0 0 ${clipWidthPx} 48`"
       preserveAspectRatio="none"
     >
-      <path :d="envelopePath" fill="rgba(255, 200, 50, 0.25)" stroke="rgba(255, 200, 50, 0.8)" stroke-width="1.5" />
+      <path
+        :d="envelopePath"
+        fill="rgba(255, 200, 50, 0.25)"
+        stroke="rgba(255, 200, 50, 0.8)"
+        stroke-width="1.5"
+      />
     </svg>
 
     <div class="handle left" @mousedown.stop="startTrim('in', $event)" />
@@ -29,11 +34,7 @@
       </div>
       <!-- Image: single image covering the clip -->
       <div v-else-if="isImage" class="thumb-strip image-strip">
-        <img
-          :src="imageStreamUrl"
-          class="thumb"
-          draggable="false"
-        />
+        <img :src="imageStreamUrl" class="thumb" draggable="false" />
       </div>
       <!-- Audio: solid colored bar -->
       <div v-else class="audio-bar" />
@@ -64,7 +65,7 @@ const THUMB_COUNT = 6;
 const props = defineProps<{
   clip: Clip;
   trackClips: Clip[];
-  trackType: 'video' | 'audio';
+  trackType: 'video' | 'audio' | 'text';
   source: SourceFile | undefined;
   zoom: number;
   active: boolean;

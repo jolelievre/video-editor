@@ -11,11 +11,35 @@ export const clipSchema = z.object({
   fadeOut: z.number().min(0).default(0),
 });
 
+export const textStyleSchema = z.object({
+  fontFamily: z.string().min(1).default('Roboto'),
+  fontSize: z.number().min(8).max(500).default(48),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .default('#FFFFFF'),
+  bold: z.boolean().default(false),
+  italic: z.boolean().default(false),
+});
+
+export const textClipSchema = z.object({
+  id: z.string().min(1),
+  content: z.string().min(1),
+  timelineStart: z.number().min(0),
+  duration: z.number().min(0.1),
+  style: textStyleSchema,
+  position: z.object({
+    x: z.number().min(0).max(100).default(50),
+    y: z.number().min(0).max(100).default(50),
+  }),
+});
+
 export const trackSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
-  type: z.enum(['video', 'audio']).default('video'),
+  type: z.enum(['video', 'audio', 'text']).default('video'),
   clips: z.array(clipSchema),
+  textClips: z.array(textClipSchema).default([]),
 });
 
 export const sourceFileSchema = z.object({

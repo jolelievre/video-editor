@@ -9,7 +9,13 @@
       @drop.prevent="onDrop"
     >
       <p>Drop media files here</p>
-      <input ref="fileInput" type="file" accept="video/*,image/*,audio/*" multiple @change="onFileSelect" />
+      <input
+        ref="fileInput"
+        type="file"
+        accept="video/*,image/*,audio/*"
+        multiple
+        @change="onFileSelect"
+      />
       <button @click="($refs.fileInput as HTMLInputElement).click()">Browse</button>
     </div>
     <div v-if="uploading" class="uploading">Uploading...</div>
@@ -39,8 +45,16 @@
             <span class="duration">{{ formatDuration(source.duration) }}</span>
           </div>
           <div class="source-actions">
-            <button class="small add-btn" title="Add to timeline" @click="$emit('addToTimeline', source.id)">+</button>
-            <button class="small delete-btn" title="Remove source" @click="removeSource(source.id)">&times;</button>
+            <button
+              class="small add-btn"
+              title="Add to timeline"
+              @click="$emit('addToTimeline', source.id)"
+            >
+              +
+            </button>
+            <button class="small delete-btn" title="Remove source" @click="removeSource(source.id)">
+              &times;
+            </button>
           </div>
         </li>
       </ul>
@@ -69,8 +83,16 @@
             <span class="duration">Image</span>
           </div>
           <div class="source-actions">
-            <button class="small add-btn" title="Add to timeline" @click="$emit('addToTimeline', source.id)">+</button>
-            <button class="small delete-btn" title="Remove source" @click="removeSource(source.id)">&times;</button>
+            <button
+              class="small add-btn"
+              title="Add to timeline"
+              @click="$emit('addToTimeline', source.id)"
+            >
+              +
+            </button>
+            <button class="small delete-btn" title="Remove source" @click="removeSource(source.id)">
+              &times;
+            </button>
           </div>
         </li>
       </ul>
@@ -94,8 +116,16 @@
             <span class="duration">{{ formatDuration(source.duration) }}</span>
           </div>
           <div class="source-actions">
-            <button class="small add-btn" title="Add to timeline" @click="$emit('addToTimeline', source.id)">+</button>
-            <button class="small delete-btn" title="Remove source" @click="removeSource(source.id)">&times;</button>
+            <button
+              class="small add-btn"
+              title="Add to timeline"
+              @click="$emit('addToTimeline', source.id)"
+            >
+              +
+            </button>
+            <button class="small delete-btn" title="Remove source" @click="removeSource(source.id)">
+              &times;
+            </button>
           </div>
         </li>
       </ul>
@@ -287,8 +317,8 @@ h3 {
 }
 
 .thumb-wrapper {
-  width: 80px;
-  height: 45px;
+  width: 120px;
+  height: 68px;
   flex-shrink: 0;
   background: #0a0a1a;
   border-radius: 3px;

@@ -15,17 +15,18 @@ export interface SourceFile {
   filename: string;
   path: string;
   type: 'video' | 'image' | 'audio';
-  duration: number;    // 0 for images
-  width: number;       // 0 for audio
-  height: number;      // 0 for audio
-  fps: number;         // 0 for images/audio
+  duration: number; // 0 for images
+  width: number; // 0 for audio
+  height: number; // 0 for audio
+  fps: number; // 0 for images/audio
 }
 
 export interface Track {
   id: string;
   name: string;
-  type: 'video' | 'audio';
+  type: 'video' | 'audio' | 'text';
   clips: Clip[];
+  textClips: TextClip[];
 }
 
 export interface Clip {
@@ -34,7 +35,27 @@ export interface Clip {
   inPoint: number;
   outPoint: number;
   timelineStart: number;
-  volume: number;       // 0.0-2.0, default 1.0
-  fadeIn: number;        // seconds, default 0
-  fadeOut: number;       // seconds, default 0
+  volume: number; // 0.0-2.0, default 1.0
+  fadeIn: number; // seconds, default 0
+  fadeOut: number; // seconds, default 0
+}
+
+export interface TextStyle {
+  fontFamily: string; // from bundled font set, e.g. "Roboto"
+  fontSize: number; // pixels relative to output resolution
+  color: string; // hex, e.g. "#FFFFFF"
+  bold: boolean;
+  italic: boolean;
+}
+
+export interface TextClip {
+  id: string;
+  content: string; // single-line
+  timelineStart: number; // seconds
+  duration: number; // seconds
+  style: TextStyle;
+  position: {
+    x: number; // 0-100, percentage of video width (center point)
+    y: number; // 0-100, percentage of video height (center point)
+  };
 }

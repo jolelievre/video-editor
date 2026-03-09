@@ -1,20 +1,47 @@
 <template>
   <div class="video-preview">
-    <!-- Video source -->
-    <div class="video-container" :class="{ hidden: activeSourceType !== 'video' }">
-      <video ref="videoEl" preload="auto" />
+    <!-- Media area: always visible when there's something to show -->
+    <div v-if="activeSourceType || activeTextClips.length > 0" class="video-container">
+      <div ref="mediaWrapperEl" class="media-wrapper">
+        <!-- Video source (hidden when not active) -->
+        <video ref="videoEl" preload="auto" :class="{ hidden: activeSourceType !== 'video' }" />
+        <!-- Image source (hidden when not active) -->
+        <img
+          v-if="imageUrl && activeSourceType === 'image'"
+          :src="imageUrl"
+          class="image-preview"
+        />
+        <!-- Black background when no video/image but text clips exist -->
+        <div v-if="!activeSourceType && activeTextClips.length > 0" class="black-bg" />
+        <!-- Text overlay: always rendered when text clips are active -->
+        <div v-if="activeTextClips.length > 0" class="text-overlay" :style="overlayStyle">
+          <TextOverlayItem
+            v-for="tc in activeTextClips"
+            :key="tc.id"
+            :text-clip="tc"
+            :scale-factor="scaleFactor"
+            :is-selected="tc.id === selectedClipId"
+            :container-width="overlayRect.width"
+            :container-height="overlayRect.height"
+            @update:position="$emit('updateTextPosition', $event)"
+            @select="$emit('selectTextClip', $event)"
+          />
+        </div>
+      </div>
     </div>
-    <!-- Image source -->
-    <div class="video-container" :class="{ hidden: activeSourceType !== 'image' }">
-      <img v-if="imageUrl" :src="imageUrl" class="image-preview" />
-    </div>
-    <!-- Audio-only placeholder -->
-    <div v-if="!activeSourceType && audioStreamUrl" class="placeholder audio-placeholder">
+    <!-- Audio-only placeholder (no text clips active) -->
+    <div
+      v-if="!activeSourceType && audioStreamUrl && activeTextClips.length === 0"
+      class="placeholder audio-placeholder"
+    >
       <div class="audio-viz">&#9835;</div>
       <p>Audio only</p>
     </div>
-    <!-- Nothing active -->
-    <div v-if="!activeSourceType && !audioStreamUrl" class="placeholder">
+    <!-- Nothing active at all -->
+    <div
+      v-if="!activeSourceType && !audioStreamUrl && activeTextClips.length === 0"
+      class="placeholder"
+    >
       <p>Add clips to the timeline to preview</p>
     </div>
     <!-- Hidden audio element for audio track -->
@@ -47,7 +74,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import type { TextClip } from '@video-editor/shared';
+import TextOverlayItem from './TextOverlayItem.vue';
+import { useFontLoader } from '../composables/useFontLoader';
+
+useFontLoader();
 
 const props = defineProps<{
   projectId: string;
@@ -77,19 +109,113 @@ const props = defineProps<{
   audioClipNextVolume: number;
   imageUrl: string | null;
   seekGeneration: number;
+  activeTextClips: TextClip[];
+  selectedClipId: string | null;
+  resolution: { width: number; height: number };
 }>();
 
 defineEmits<{
   togglePlay: [];
+  updateTextPosition: [payload: { clipId: string; x: number; y: number }];
+  selectTextClip: [clipId: string];
 }>();
 
 const videoEl = ref<HTMLVideoElement | null>(null);
 const audioEl = ref<HTMLAudioElement | null>(null);
+const mediaWrapperEl = ref<HTMLElement | null>(null);
 const masterVolume = ref(1);
 const muted = ref(false);
 let volumeBeforeMute = 1;
 let loadedVideoUrl: string | null = null;
 let loadedAudioUrl: string | null = null;
+
+// Overlay sizing: track the rendered video/image area to position text correctly
+const overlayRect = ref({ width: 100, height: 100 });
+
+const scaleFactor = computed(() => {
+  if (props.resolution.width <= 0) return 1;
+  return overlayRect.value.width / props.resolution.width;
+});
+
+const overlayStyle = computed(() => ({
+  width: `${overlayRect.value.width}px`,
+  height: `${overlayRect.value.height}px`,
+}));
+
+let resizeObserver: ResizeObserver | null = null;
+
+function updateOverlayRect() {
+  // Find the active media element to get its rendered size
+  const video = videoEl.value;
+  if (video && props.activeSourceType === 'video' && video.videoWidth > 0) {
+    const rect = video.getBoundingClientRect();
+    const videoAspect = video.videoWidth / video.videoHeight;
+    const containerAspect = rect.width / rect.height;
+
+    let renderedWidth: number;
+    let renderedHeight: number;
+    if (videoAspect > containerAspect) {
+      renderedWidth = rect.width;
+      renderedHeight = rect.width / videoAspect;
+    } else {
+      renderedHeight = rect.height;
+      renderedWidth = rect.height * videoAspect;
+    }
+    overlayRect.value = { width: renderedWidth, height: renderedHeight };
+    return;
+  }
+
+  // For images or text-only, use resolution aspect ratio with container size
+  const wrapper = mediaWrapperEl.value;
+  if (wrapper) {
+    const rect = wrapper.getBoundingClientRect();
+    const aspect = props.resolution.width / props.resolution.height;
+    const containerAspect = rect.width / rect.height;
+    let w: number;
+    let h: number;
+    if (aspect > containerAspect) {
+      w = rect.width;
+      h = rect.width / aspect;
+    } else {
+      h = rect.height;
+      w = rect.height * aspect;
+    }
+    overlayRect.value = { width: w, height: h };
+  }
+}
+
+onMounted(() => {
+  resizeObserver = new ResizeObserver(() => updateOverlayRect());
+  if (mediaWrapperEl.value) resizeObserver.observe(mediaWrapperEl.value);
+
+  if (props.streamUrl && props.activeSourceType === 'video') {
+    loadAndSeekVideo(props.streamUrl, props.sourceTime, false);
+  }
+  if (props.audioStreamUrl) {
+    loadAndSeekAudio(props.audioStreamUrl, props.audioSourceTime, false);
+  }
+});
+
+onUnmounted(() => {
+  resizeObserver?.disconnect();
+});
+
+// Re-observe wrapper when it appears/disappears (e.g. text clips activate)
+watch(mediaWrapperEl, (el) => {
+  resizeObserver?.disconnect();
+  if (el) {
+    resizeObserver?.observe(el);
+    updateOverlayRect();
+  }
+});
+
+// Update overlay rect when video metadata loads
+watch(
+  () => props.activeClipId,
+  () => {
+    setTimeout(updateOverlayRect, 100);
+  },
+);
 
 const sliderValue = computed(() => {
   if (muted.value) return 0;
@@ -118,12 +244,10 @@ function computeFadeMultiplier(
 ): number {
   if (clipDuration <= 0) return clipVolume;
   const elapsed = playhead - timelineStart;
-  // Fade in: ramp from prevClipVolume to clipVolume
   if (fadeIn > 0 && elapsed < fadeIn) {
     const t = elapsed / fadeIn;
     return prevClipVolume + (clipVolume - prevClipVolume) * t;
   }
-  // Fade out: ramp from clipVolume to nextClipVolume
   if (fadeOut > 0 && elapsed > clipDuration - fadeOut) {
     const remaining = clipDuration - elapsed;
     const t = Math.max(0, remaining / fadeOut);
@@ -207,6 +331,7 @@ function loadAndSeekVideo(url: string, seekTime: number, shouldPlay: boolean) {
       applyVideoVolume();
       video.currentTime = seekTime;
       if (shouldPlay) video.play();
+      updateOverlayRect();
     },
     { once: true },
   );
@@ -251,7 +376,7 @@ watch(
   },
 );
 
-// Watch audio clip changes — load source and seek (mirrors video clip watcher)
+// Watch audio clip changes
 watch(
   () => props.activeAudioClipId,
   (clipId) => {
@@ -264,27 +389,18 @@ watch(
   },
 );
 
-// Watch clip volume changes and playhead position (for fade effects)
 watch(() => props.clipVolume, applyVideoVolume);
 watch(() => props.audioClipVolume, applyAudioVolume);
-watch(() => props.playheadPosition, () => {
-  if (props.isPlaying) {
-    applyVideoVolume();
-    applyAudioVolume();
-  }
-});
+watch(
+  () => props.playheadPosition,
+  () => {
+    if (props.isPlaying) {
+      applyVideoVolume();
+      applyAudioVolume();
+    }
+  },
+);
 
-// Initial load on mount
-onMounted(() => {
-  if (props.streamUrl && props.activeSourceType === 'video') {
-    loadAndSeekVideo(props.streamUrl, props.sourceTime, false);
-  }
-  if (props.audioStreamUrl) {
-    loadAndSeekAudio(props.audioStreamUrl, props.audioSourceTime, false);
-  }
-});
-
-// Handle streamUrl appearing for the first time
 watch(
   () => props.streamUrl,
   (url, oldUrl) => {
@@ -298,7 +414,6 @@ watch(
   },
 );
 
-// Handle audioStreamUrl changes (appearing, disappearing, or switching source)
 watch(
   () => props.audioStreamUrl,
   (url, oldUrl) => {
@@ -312,7 +427,6 @@ watch(
   },
 );
 
-// Seek video when paused (scrubbing)
 watch(
   () => props.sourceTime,
   (time) => {
@@ -324,7 +438,6 @@ watch(
   },
 );
 
-// Seek audio when paused (scrubbing) — load source if needed
 watch(
   () => props.audioSourceTime,
   (time) => {
@@ -342,7 +455,6 @@ watch(
   },
 );
 
-// Re-sync both video and audio on user-initiated seek (works during playback too)
 watch(
   () => props.seekGeneration,
   () => {
@@ -362,7 +474,6 @@ watch(
   },
 );
 
-// Sync video play/pause state
 watch(
   () => props.isPlaying,
   (playing) => {
@@ -378,7 +489,6 @@ watch(
       }
       if (audio && props.audioStreamUrl && props.activeAudioClipId) {
         if (loadedAudioUrl !== props.audioStreamUrl || audio.readyState < 2) {
-          // Not loaded yet — load, seek, and play
           loadAndSeekAudio(props.audioStreamUrl, props.audioSourceTime, true);
         } else {
           applyAudioVolume();
@@ -423,20 +533,44 @@ function formatTime(seconds: number): string {
   display: none;
 }
 
-video {
-  max-width: 100%;
+.media-wrapper {
+  position: relative;
+  width: 100%;
   flex: 1;
   min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+video {
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
   background: #000;
 }
 
+video.hidden {
+  display: none;
+}
+
 .image-preview {
   max-width: 100%;
-  flex: 1;
-  min-height: 0;
+  max-height: 100%;
   object-fit: contain;
   background: #000;
+}
+
+.black-bg {
+  width: 100%;
+  height: 100%;
+  background: #000;
+}
+
+.text-overlay {
+  position: absolute;
+  pointer-events: none;
+  overflow: hidden;
 }
 
 .audio-placeholder {
@@ -455,8 +589,13 @@ video {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .controls {

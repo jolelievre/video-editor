@@ -9,6 +9,9 @@
           &#9986;
         </button>
         <span>Timeline</span>
+        <button class="add-text-btn" title="Add text track" @click="store.addTextTrack()">
+          T+
+        </button>
       </div>
       <div class="zoom-controls">
         <button @click="tl.setZoom(tl.zoomLevel.value - zoomStep)">-</button>
@@ -46,15 +49,34 @@
           class="track"
           :class="{
             'audio-track': (track.type ?? 'video') === 'audio',
+            'text-track': track.type === 'text',
             'selected-track': track.id === store.selectedTrackId,
           }"
           @mousedown="store.selectTrack(track.id)"
         >
           <div class="track-label">
             <span v-if="(track.type ?? 'video') === 'audio'" class="track-icon">&#9835;</span>
+            <span v-else-if="track.type === 'text'" class="track-icon text-icon">T</span>
             {{ track.name }}
+            <button
+              v-if="track.type === 'text'"
+              class="add-clip-btn"
+              title="Add text clip"
+              @click.stop="store.addTextClip(track.id, tl.playheadPosition.value)"
+            >
+              +
+            </button>
+            <button
+              v-if="track.type === 'text'"
+              class="remove-track-btn"
+              title="Remove text track"
+              @click.stop="store.removeTrack(track.id)"
+            >
+              &times;
+            </button>
           </div>
           <div class="track-clips">
+            <!-- Media clips (video/audio tracks) -->
             <TimelineClip
               v-for="clip in track.clips"
               :key="clip.id"
@@ -71,6 +93,19 @@
               @remove="$emit('removeClip', clip.id)"
               @select="store.selectClip(clip.id)"
             />
+            <!-- Text clips (text tracks) -->
+            <TimelineTextClip
+              v-for="tc in track.textClips ?? []"
+              :key="tc.id"
+              :text-clip="tc"
+              :zoom="tl.zoomLevel.value"
+              :active="false"
+              :selected="tc.id === store.selectedClipId"
+              @move="store.moveTextClip(tc.id, $event)"
+              @trim="onTextTrim(tc.id, $event)"
+              @remove="store.removeTextClip(tc.id)"
+              @select="store.selectClip(tc.id)"
+            />
           </div>
         </div>
       </div>
@@ -84,6 +119,7 @@ import type { ProjectConfig, Clip } from '@video-editor/shared';
 import type { TimelineControls } from '../composables/useTimeline';
 import { useProjectStore } from '../stores/project';
 import TimelineClip from './TimelineClip.vue';
+import TimelineTextClip from './TimelineTextClip.vue';
 
 const props = defineProps<{
   config: ProjectConfig;
@@ -183,6 +219,10 @@ function onTrim(trackClips: Clip[], trimmedClip: Clip, changes: Partial<Clip>) {
 
   // Apply the trim change to the trimmed clip itself
   store.updateClip(trimmedClip.id, changes);
+}
+
+function onTextTrim(clipId: string, changes: { timelineStart?: number; duration?: number }) {
+  store.updateTextClip(clipId, changes);
 }
 
 function onDropOnTimeline(e: DragEvent) {
@@ -337,6 +377,10 @@ watch(
   background: rgba(108, 99, 255, 0.05);
 }
 
+.track.text-track {
+  background: rgba(0, 137, 123, 0.05);
+}
+
 .track.selected-track {
   outline: 1px solid #6c63ff;
   outline-offset: -1px;
@@ -365,6 +409,64 @@ watch(
 .track-icon {
   font-size: 14px;
   color: #6c63ff;
+}
+
+.track-icon.text-icon {
+  color: #00897b;
+  font-weight: bold;
+}
+
+.add-text-btn {
+  padding: 2px 8px;
+  font-size: 13px;
+  font-weight: bold;
+  background: #00897b;
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+}
+
+.add-text-btn:hover {
+  background: #00a08a;
+}
+
+.add-clip-btn {
+  padding: 0 4px;
+  font-size: 14px;
+  font-weight: bold;
+  background: rgba(0, 137, 123, 0.4);
+  border: none;
+  border-radius: 3px;
+  color: white;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.add-clip-btn:hover {
+  background: rgba(0, 137, 123, 0.7);
+}
+
+.remove-track-btn {
+  margin-left: auto;
+  padding: 0 4px;
+  font-size: 14px;
+  font-weight: bold;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: #ff6b6b;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.remove-track-btn:hover {
+  background: #ff4444;
+  color: white;
+}
+
+.text-track .track-label {
+  background: #0f1423;
 }
 
 .track-clips {

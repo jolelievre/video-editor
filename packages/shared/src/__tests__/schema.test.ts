@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { projectConfigSchema, clipSchema, trackSchema, sourceFileSchema } from '../schema.js';
+import {
+  projectConfigSchema,
+  clipSchema,
+  trackSchema,
+  sourceFileSchema,
+  textClipSchema,
+  textStyleSchema,
+} from '../schema.js';
 
 const validConfig = {
   version: '1.0' as const,
@@ -80,6 +87,49 @@ describe('projectConfigSchema', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('accepts config with text tracks', () => {
+    const result = projectConfigSchema.safeParse({
+      ...validConfig,
+      timeline: {
+        tracks: [
+          ...validConfig.timeline.tracks,
+          {
+            id: 'text-track-1',
+            name: 'Text 1',
+            type: 'text',
+            clips: [],
+            textClips: [
+              {
+                id: 'tc-1',
+                content: 'Hello World',
+                timelineStart: 0,
+                duration: 5,
+                style: {
+                  fontFamily: 'Roboto',
+                  fontSize: 48,
+                  color: '#FFFFFF',
+                  bold: false,
+                  italic: false,
+                },
+                position: { x: 50, y: 50 },
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('backward compatible: existing configs without textClips still validate', () => {
+    // The default([]) on textClips means old configs without it are valid
+    const result = projectConfigSchema.safeParse(validConfig);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.timeline.tracks[0].textClips).toEqual([]);
+    }
+  });
 });
 
 describe('clipSchema', () => {
@@ -114,6 +164,154 @@ describe('trackSchema', () => {
       clips: [],
     });
     expect(result.success).toBe(true);
+  });
+
+  it('accepts text track type', () => {
+    const result = trackSchema.safeParse({
+      id: 'track-1',
+      name: 'Text 1',
+      type: 'text',
+      clips: [],
+      textClips: [],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('defaults textClips to empty array', () => {
+    const result = trackSchema.safeParse({
+      id: 'track-1',
+      name: 'Track 1',
+      clips: [],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.textClips).toEqual([]);
+    }
+  });
+});
+
+describe('textStyleSchema', () => {
+  it('applies default values', () => {
+    const result = textStyleSchema.safeParse({});
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.fontFamily).toBe('Roboto');
+      expect(result.data.fontSize).toBe(48);
+      expect(result.data.color).toBe('#FFFFFF');
+      expect(result.data.bold).toBe(false);
+      expect(result.data.italic).toBe(false);
+    }
+  });
+
+  it('rejects invalid color format', () => {
+    const result = textStyleSchema.safeParse({ color: 'red' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects fontSize below 8', () => {
+    const result = textStyleSchema.safeParse({ fontSize: 5 });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects fontSize above 500', () => {
+    const result = textStyleSchema.safeParse({ fontSize: 501 });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('textClipSchema', () => {
+  it('accepts a valid text clip', () => {
+    const result = textClipSchema.safeParse({
+      id: 'tc-1',
+      content: 'Hello World',
+      timelineStart: 2,
+      duration: 5,
+      style: {
+        fontFamily: 'Roboto',
+        fontSize: 48,
+        color: '#FFFFFF',
+        bold: false,
+        italic: false,
+      },
+      position: { x: 50, y: 50 },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects empty content', () => {
+    const result = textClipSchema.safeParse({
+      id: 'tc-1',
+      content: '',
+      timelineStart: 0,
+      duration: 5,
+      style: {},
+      position: {},
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects duration below 0.1', () => {
+    const result = textClipSchema.safeParse({
+      id: 'tc-1',
+      content: 'Test',
+      timelineStart: 0,
+      duration: 0.05,
+      style: {},
+      position: {},
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects negative duration', () => {
+    const result = textClipSchema.safeParse({
+      id: 'tc-1',
+      content: 'Test',
+      timelineStart: 0,
+      duration: -1,
+      style: {},
+      position: {},
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects position x out of 0-100 range', () => {
+    const result = textClipSchema.safeParse({
+      id: 'tc-1',
+      content: 'Test',
+      timelineStart: 0,
+      duration: 5,
+      style: {},
+      position: { x: 101, y: 50 },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects position y out of 0-100 range', () => {
+    const result = textClipSchema.safeParse({
+      id: 'tc-1',
+      content: 'Test',
+      timelineStart: 0,
+      duration: 5,
+      style: {},
+      position: { x: 50, y: -5 },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('applies default position values', () => {
+    const result = textClipSchema.safeParse({
+      id: 'tc-1',
+      content: 'Test',
+      timelineStart: 0,
+      duration: 5,
+      style: {},
+      position: {},
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.position.x).toBe(50);
+      expect(result.data.position.y).toBe(50);
+    }
   });
 });
 
