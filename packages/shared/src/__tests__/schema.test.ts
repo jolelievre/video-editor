@@ -6,6 +6,7 @@ import {
   sourceFileSchema,
   textClipSchema,
   textStyleSchema,
+  textAnimationSchema,
 } from '../schema.js';
 
 const validConfig = {
@@ -312,6 +313,126 @@ describe('textClipSchema', () => {
       expect(result.data.position.x).toBe(50);
       expect(result.data.position.y).toBe(50);
     }
+  });
+});
+
+describe('textAnimationSchema', () => {
+  it('applies default values', () => {
+    const result = textAnimationSchema.safeParse({});
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.type).toBe('none');
+      expect(result.data.duration).toBe(0);
+      expect(result.data.direction).toBeUndefined();
+    }
+  });
+
+  it('accepts all animation types', () => {
+    for (const type of ['none', 'fade', 'slide', 'typewriter'] as const) {
+      const result = textAnimationSchema.safeParse({ type, duration: 1 });
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it('accepts slide with direction', () => {
+    for (const direction of ['left', 'right', 'top', 'bottom'] as const) {
+      const result = textAnimationSchema.safeParse({ type: 'slide', duration: 1, direction });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.direction).toBe(direction);
+      }
+    }
+  });
+
+  it('rejects duration above 30', () => {
+    const result = textAnimationSchema.safeParse({ type: 'fade', duration: 31 });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects negative duration', () => {
+    const result = textAnimationSchema.safeParse({ type: 'fade', duration: -1 });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects invalid type', () => {
+    const result = textAnimationSchema.safeParse({ type: 'bounce', duration: 1 });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects invalid direction', () => {
+    const result = textAnimationSchema.safeParse({ type: 'slide', duration: 1, direction: 'up' });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts typewriter with alignment', () => {
+    for (const alignment of ['center', 'left'] as const) {
+      const result = textAnimationSchema.safeParse({
+        type: 'typewriter',
+        duration: 2,
+        alignment,
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.alignment).toBe(alignment);
+      }
+    }
+  });
+
+  it('defaults alignment to undefined', () => {
+    const result = textAnimationSchema.safeParse({ type: 'typewriter', duration: 1 });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.alignment).toBeUndefined();
+    }
+  });
+
+  it('rejects invalid alignment', () => {
+    const result = textAnimationSchema.safeParse({
+      type: 'typewriter',
+      duration: 1,
+      alignment: 'right',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('textClipSchema animation fields', () => {
+  const baseTextClip = {
+    id: 'tc-1',
+    content: 'Hello',
+    timelineStart: 0,
+    duration: 5,
+    style: {},
+    position: {},
+  };
+
+  it('defaults animationIn and animationOut', () => {
+    const result = textClipSchema.safeParse(baseTextClip);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.animationIn).toEqual({ type: 'none', duration: 0 });
+      expect(result.data.animationOut).toEqual({ type: 'none', duration: 0 });
+    }
+  });
+
+  it('accepts explicit animation values', () => {
+    const result = textClipSchema.safeParse({
+      ...baseTextClip,
+      animationIn: { type: 'fade', duration: 0.5 },
+      animationOut: { type: 'slide', duration: 1, direction: 'right' },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.animationIn.type).toBe('fade');
+      expect(result.data.animationIn.duration).toBe(0.5);
+      expect(result.data.animationOut.type).toBe('slide');
+      expect(result.data.animationOut.direction).toBe('right');
+    }
+  });
+
+  it('backward compatibility: text clips without animation fields parse correctly', () => {
+    const result = textClipSchema.safeParse(baseTextClip);
+    expect(result.success).toBe(true);
   });
 });
 

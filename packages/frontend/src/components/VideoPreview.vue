@@ -23,6 +23,7 @@
             :is-selected="tc.id === selectedClipId"
             :container-width="overlayRect.width"
             :container-height="overlayRect.height"
+            :playhead-position="playheadPosition"
             @update:position="$emit('updateTextPosition', $event)"
             @select="$emit('selectTextClip', $event)"
           />

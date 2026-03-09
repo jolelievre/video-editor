@@ -1,5 +1,5 @@
 <template>
-  <div class="clip-inspector">
+  <div class="clip-inspector" :class="{ 'has-selection': !!textClip }">
     <h3>Text Properties</h3>
     <div v-if="textClip" class="inspector-content">
       <div class="field">
@@ -105,6 +105,84 @@
 
       <div class="separator" />
 
+      <h4>Animation In</h4>
+      <div class="field">
+        <label>Type</label>
+        <select class="select-input" :value="animInType" @change="onAnimInTypeChange">
+          <option value="none">None</option>
+          <option value="fade">Fade</option>
+          <option value="slide">Slide</option>
+          <option value="typewriter">Typewriter</option>
+        </select>
+      </div>
+      <div v-if="animInType !== 'none'" class="field">
+        <label>Duration</label>
+        <div class="slider-row">
+          <input
+            type="number"
+            class="number-input"
+            min="0"
+            max="30"
+            step="0.1"
+            :value="animInDuration"
+            @input="onAnimInDurationChange"
+          />
+          <span class="slider-value">s</span>
+        </div>
+      </div>
+      <div v-if="animInType === 'slide'" class="field">
+        <label>Direction</label>
+        <select class="select-input" :value="animInDirection" @change="onAnimInDirectionChange">
+          <option value="left">Left</option>
+          <option value="right">Right</option>
+          <option value="top">Top</option>
+          <option value="bottom">Bottom</option>
+        </select>
+      </div>
+      <div v-if="animInType === 'typewriter'" class="field">
+        <label>Alignment</label>
+        <select class="select-input" :value="animInAlignment" @change="onAnimInAlignmentChange">
+          <option value="center">Center</option>
+          <option value="left">Left</option>
+        </select>
+      </div>
+
+      <h4>Animation Out</h4>
+      <div class="field">
+        <label>Type</label>
+        <select class="select-input" :value="animOutType" @change="onAnimOutTypeChange">
+          <option value="none">None</option>
+          <option value="fade">Fade</option>
+          <option value="slide">Slide</option>
+        </select>
+      </div>
+      <div v-if="animOutType !== 'none'" class="field">
+        <label>Duration</label>
+        <div class="slider-row">
+          <input
+            type="number"
+            class="number-input"
+            min="0"
+            max="30"
+            step="0.1"
+            :value="animOutDuration"
+            @input="onAnimOutDurationChange"
+          />
+          <span class="slider-value">s</span>
+        </div>
+      </div>
+      <div v-if="animOutType === 'slide'" class="field">
+        <label>Direction</label>
+        <select class="select-input" :value="animOutDirection" @change="onAnimOutDirectionChange">
+          <option value="left">Left</option>
+          <option value="right">Right</option>
+          <option value="top">Top</option>
+          <option value="bottom">Bottom</option>
+        </select>
+      </div>
+
+      <div class="separator" />
+
       <div class="field">
         <label>Start</label>
         <div class="slider-row">
@@ -143,7 +221,12 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue';
-import type { TextClip } from '@video-editor/shared';
+import type {
+  TextClip,
+  TextAnimationType,
+  SlideDirection,
+  TypewriterAlignment,
+} from '@video-editor/shared';
 import { BUNDLED_FONTS } from '@video-editor/shared/fonts';
 
 const sortedFonts = computed(() =>
@@ -169,6 +252,67 @@ function onClickOutside(e: MouseEvent) {
 
 onMounted(() => document.addEventListener('mousedown', onClickOutside));
 onUnmounted(() => document.removeEventListener('mousedown', onClickOutside));
+
+const animInType = computed(() => props.textClip?.animationIn?.type ?? 'none');
+const animInDuration = computed(() => props.textClip?.animationIn?.duration ?? 0);
+const animInDirection = computed(() => props.textClip?.animationIn?.direction ?? 'left');
+const animInAlignment = computed(() => props.textClip?.animationIn?.alignment ?? 'center');
+const animOutType = computed(() => props.textClip?.animationOut?.type ?? 'none');
+const animOutDuration = computed(() => props.textClip?.animationOut?.duration ?? 0);
+const animOutDirection = computed(() => props.textClip?.animationOut?.direction ?? 'left');
+
+function onAnimInTypeChange(e: Event) {
+  const type = (e.target as HTMLSelectElement).value as TextAnimationType;
+  const update: Partial<TextClip> = {
+    animationIn: {
+      type,
+      duration: type === 'none' ? 0 : animInDuration.value || 0.5,
+      ...(type === 'slide' ? { direction: animInDirection.value } : {}),
+    },
+  };
+  emit('update', update);
+}
+
+function onAnimInDurationChange(e: Event) {
+  const val = parseFloat((e.target as HTMLInputElement).value);
+  if (!isNaN(val) && val >= 0) {
+    emit('update', { animationIn: { duration: val } } as Partial<TextClip>);
+  }
+}
+
+function onAnimInDirectionChange(e: Event) {
+  const direction = (e.target as HTMLSelectElement).value as SlideDirection;
+  emit('update', { animationIn: { direction } } as Partial<TextClip>);
+}
+
+function onAnimInAlignmentChange(e: Event) {
+  const alignment = (e.target as HTMLSelectElement).value as TypewriterAlignment;
+  emit('update', { animationIn: { alignment } } as Partial<TextClip>);
+}
+
+function onAnimOutTypeChange(e: Event) {
+  const type = (e.target as HTMLSelectElement).value as TextAnimationType;
+  const update: Partial<TextClip> = {
+    animationOut: {
+      type,
+      duration: type === 'none' ? 0 : animOutDuration.value || 0.5,
+      ...(type === 'slide' ? { direction: animOutDirection.value } : {}),
+    },
+  };
+  emit('update', update);
+}
+
+function onAnimOutDurationChange(e: Event) {
+  const val = parseFloat((e.target as HTMLInputElement).value);
+  if (!isNaN(val) && val >= 0) {
+    emit('update', { animationOut: { duration: val } } as Partial<TextClip>);
+  }
+}
+
+function onAnimOutDirectionChange(e: Event) {
+  const direction = (e.target as HTMLSelectElement).value as SlideDirection;
+  emit('update', { animationOut: { direction } } as Partial<TextClip>);
+}
 
 function onContentChange(e: Event) {
   const val = (e.target as HTMLInputElement).value;
@@ -224,6 +368,12 @@ function onDurationChange(e: Event) {
 <style scoped>
 .clip-inspector {
   padding: 12px;
+  border: 2px solid transparent;
+  border-radius: 4px;
+}
+
+.clip-inspector.has-selection {
+  border-color: #00897b;
 }
 
 h3 {
@@ -309,6 +459,28 @@ h3 {
 .font-dropdown li.active {
   background: #00897b;
   color: white;
+}
+
+h4 {
+  font-size: 12px;
+  color: #00897b;
+  margin: 4px 0;
+}
+
+.select-input {
+  background: #1a1a2e;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #ccc;
+  padding: 4px 8px;
+  font-size: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.select-input:focus {
+  border-color: #00897b;
+  outline: none;
 }
 
 .text-input,

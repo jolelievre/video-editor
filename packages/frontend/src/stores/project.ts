@@ -164,8 +164,6 @@ export const useProjectStore = defineStore('project', () => {
       const next = currentIdx < sorted.length - 1 ? sorted[currentIdx + 1] : null;
 
       const prevEnd = prev ? getClipEnd(prev) : 0;
-      const nextStart = next ? next.timelineStart : Infinity;
-
       // Check if dragging past threshold to reorder
       const pastPrevThreshold = prev && desiredStart < prev.timelineStart - thresholdTime;
       const pastNextThreshold = next && desiredEnd > getClipEnd(next) + thresholdTime;
@@ -251,6 +249,8 @@ export const useProjectStore = defineStore('project', () => {
             duration: rightDuration,
             style: { ...tc.style },
             position: { ...tc.position },
+            animationIn: tc.animationIn ? { ...tc.animationIn } : undefined,
+            animationOut: tc.animationOut ? { ...tc.animationOut } : undefined,
           };
 
           tc.duration = leftDuration;
@@ -362,6 +362,20 @@ export const useProjectStore = defineStore('project', () => {
         if (changes.position) {
           tc.position = { ...tc.position, ...changes.position };
           delete changes.position;
+        }
+        if (changes.animationIn) {
+          tc.animationIn = {
+            ...(tc.animationIn ?? { type: 'none' as const, duration: 0 }),
+            ...changes.animationIn,
+          };
+          delete changes.animationIn;
+        }
+        if (changes.animationOut) {
+          tc.animationOut = {
+            ...(tc.animationOut ?? { type: 'none' as const, duration: 0 }),
+            ...changes.animationOut,
+          };
+          delete changes.animationOut;
         }
         Object.assign(tc, changes);
         debouncedSave();
