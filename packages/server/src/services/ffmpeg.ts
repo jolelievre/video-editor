@@ -274,11 +274,7 @@ function buildAnimatedY(tc: TextClip): string {
   return expr;
 }
 
-function buildTypewriterFilters(
-  tc: TextClip,
-  inLabel: string,
-  outLabel: string,
-): string[] {
+function buildTypewriterFilters(tc: TextClip, inLabel: string, outLabel: string): string[] {
   const animIn = tc.animationIn;
   if (!animIn || animIn.type !== 'typewriter' || animIn.duration <= 0) return [];
 
@@ -292,9 +288,7 @@ function buildTypewriterFilters(
   const alphaExpr = buildAlphaExpression(tc);
   const isLeftAligned = animIn.alignment === 'left';
   // For left-aligned typewriter, anchor at left edge instead of center
-  const xExpr = isLeftAligned
-    ? `min(max(0\\,w*${tc.position.x}/100)\\,w-tw)`
-    : buildAnimatedX(tc);
+  const xExpr = isLeftAligned ? `min(max(0\\,w*${tc.position.x}/100)\\,w-tw)` : buildAnimatedX(tc);
   const yExpr = buildAnimatedY(tc);
 
   const filters: string[] = [];
@@ -334,8 +328,7 @@ function buildDrawtextFilters(
 
   // Count total filter labels needed (typewriter clips use N labels)
   const filterEntries: { tc: TextClip; count: number }[] = textClips.map((tc) => {
-    const isTypewriter =
-      tc.animationIn?.type === 'typewriter' && tc.animationIn.duration > 0;
+    const isTypewriter = tc.animationIn?.type === 'typewriter' && tc.animationIn.duration > 0;
     return { tc, count: isTypewriter ? tc.content.length : 1 };
   });
 

@@ -50,7 +50,7 @@ export const useProjectStore = defineStore('project', () => {
     if (!track) {
       track = {
         id: uuidv4(),
-        name: type === 'audio' ? 'Audio' : 'Video',
+        name: type === 'audio' ? 'Audio' : 'Medias',
         type,
         clips: [],
         textClips: [],

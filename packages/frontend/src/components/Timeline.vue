@@ -38,7 +38,7 @@
         </div>
         <div
           class="playhead"
-          :style="{ left: 80 + tl.timeToPixels(tl.playheadPosition.value) + 'px' }"
+          :style="{ left: 100 + tl.timeToPixels(tl.playheadPosition.value) + 'px' }"
         />
         <div v-if="config.timeline.tracks.length === 0" class="empty-track">
           Drop a source here to start
@@ -57,6 +57,7 @@
           <div class="track-label">
             <span v-if="(track.type ?? 'video') === 'audio'" class="track-icon">&#9835;</span>
             <span v-else-if="track.type === 'text'" class="track-icon text-icon">T</span>
+            <span v-else class="track-icon media-icon">&#9654;</span>
             {{ track.name }}
             <button
               v-if="track.type === 'text'"
@@ -238,7 +239,7 @@ watch(
   (pos) => {
     if (!props.isPlaying || !scrollContainer.value) return;
     const container = scrollContainer.value;
-    const playheadPx = props.tl.timeToPixels(pos) + 80; // account for padding-left
+    const playheadPx = props.tl.timeToPixels(pos) + 100; // account for padding-left
     const scrollLeft = container.scrollLeft;
     const containerWidth = container.clientWidth;
 
@@ -328,7 +329,7 @@ watch(
 .timeline-content {
   position: relative;
   min-height: 120px;
-  padding-left: 80px;
+  padding-left: 100px;
 }
 
 .time-ruler {
@@ -391,8 +392,8 @@ watch(
 }
 
 .track-label {
-  width: 80px;
-  margin-left: -80px;
+  width: 100px;
+  margin-left: -100px;
   padding: 8px;
   font-size: 11px;
   color: #888;
@@ -414,6 +415,11 @@ watch(
 .track-icon.text-icon {
   color: #00897b;
   font-weight: bold;
+}
+
+.track-icon.media-icon {
+  color: #2d4a7a;
+  font-size: 10px;
 }
 
 .add-text-btn {

@@ -127,8 +127,13 @@ function formatDuration(seconds: number): string {
 }
 
 .text-clip.selected {
-  border-color: #26a69a;
-  box-shadow: 0 0 6px rgba(38, 166, 154, 0.4);
+  border-color: #ffd600;
+  box-shadow: 0 0 6px rgba(255, 214, 0, 0.4);
+}
+
+.text-clip.selected .handle.left,
+.text-clip.selected .handle.right {
+  background: rgba(255, 214, 0, 0.6);
 }
 
 .text-clip.active {

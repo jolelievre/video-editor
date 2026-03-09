@@ -149,39 +149,39 @@ VIDEO_EDITOR_DATA_DIR=/path/to/data npm run dev -w packages/server
 
 All project routes are prefixed with `/api/projects`. Font routes are under `/api/fonts`.
 
-| Method   | Route                                        | Description                                                     |
-| -------- | -------------------------------------------- | --------------------------------------------------------------- |
-| `GET`    | `/api/projects`                              | List all projects                                               |
-| `POST`   | `/api/projects`                              | Create a new project                                            |
-| `GET`    | `/api/projects/:id`                          | Get project config                                              |
-| `PUT`    | `/api/projects/:id`                          | Update project config (rename, modify timeline, etc.)           |
-| `DELETE` | `/api/projects/:id`                          | Delete a project                                                |
-| `POST`   | `/api/projects/:id/sources`                  | Upload a source file (multipart, max 500 MB)                    |
-| `DELETE` | `/api/projects/:id/sources/:sourceId`        | Delete a source file                                            |
-| `GET`    | `/api/projects/:id/sources/:sourceId/stream` | Stream a source file (supports range requests)                  |
+| Method   | Route                                              | Description                                                    |
+| -------- | -------------------------------------------------- | -------------------------------------------------------------- |
+| `GET`    | `/api/projects`                                    | List all projects                                              |
+| `POST`   | `/api/projects`                                    | Create a new project                                           |
+| `GET`    | `/api/projects/:id`                                | Get project config                                             |
+| `PUT`    | `/api/projects/:id`                                | Update project config (rename, modify timeline, etc.)          |
+| `DELETE` | `/api/projects/:id`                                | Delete a project                                               |
+| `POST`   | `/api/projects/:id/sources`                        | Upload a source file (multipart, max 500 MB)                   |
+| `DELETE` | `/api/projects/:id/sources/:sourceId`              | Delete a source file                                           |
+| `GET`    | `/api/projects/:id/sources/:sourceId/stream`       | Stream a source file (supports range requests)                 |
 | `GET`    | `/api/projects/:id/sources/:sourceId/thumb/:index` | Get a thumbnail for a source (auto-generated on first request) |
-| `POST`   | `/api/projects/:id/export`                   | Start an export job                                             |
-| `GET`    | `/api/projects/:id/export/status`            | Poll export progress                                            |
-| `GET`    | `/api/projects/:id/export/download`          | Download the exported MP4                                       |
-| `GET`    | `/api/fonts`                                 | List all bundled fonts with metadata                            |
-| `GET`    | `/api/fonts/:filename`                       | Download a font file (TTF)                                      |
+| `POST`   | `/api/projects/:id/export`                         | Start an export job                                            |
+| `GET`    | `/api/projects/:id/export/status`                  | Poll export progress                                           |
+| `GET`    | `/api/projects/:id/export/download`                | Download the exported MP4                                      |
+| `GET`    | `/api/fonts`                                       | List all bundled fonts with metadata                           |
+| `GET`    | `/api/fonts/:filename`                             | Download a font file (TTF)                                     |
 
 ## Bundled Fonts
 
 10 font families are included for text overlays. Each font is available in the preview and used by FFmpeg during export.
 
-| Font              | Regular | Bold | Italic | Bold Italic |
-| ----------------- | ------- | ---- | ------ | ----------- |
-| Roboto            | yes     | yes  | yes    | yes         |
-| Open Sans         | yes     | yes  | yes    | yes         |
-| Montserrat        | yes     | yes  | yes    | yes         |
-| Lato              | yes     | yes  | yes    | yes         |
-| Oswald            | yes     | yes  | -      | -           |
-| Playfair Display  | yes     | yes  | yes    | yes         |
-| Source Code Pro   | yes     | yes  | yes    | yes         |
-| Bebas Neue        | yes     | -    | -      | -           |
-| Permanent Marker  | yes     | -    | -      | -           |
-| Dancing Script    | yes     | yes  | -      | -           |
+| Font             | Regular | Bold | Italic | Bold Italic |
+| ---------------- | ------- | ---- | ------ | ----------- |
+| Roboto           | yes     | yes  | yes    | yes         |
+| Open Sans        | yes     | yes  | yes    | yes         |
+| Montserrat       | yes     | yes  | yes    | yes         |
+| Lato             | yes     | yes  | yes    | yes         |
+| Oswald           | yes     | yes  | -      | -           |
+| Playfair Display | yes     | yes  | yes    | yes         |
+| Source Code Pro  | yes     | yes  | yes    | yes         |
+| Bebas Neue       | yes     | -    | -      | -           |
+| Permanent Marker | yes     | -    | -      | -           |
+| Dancing Script   | yes     | yes  | -      | -           |
 
 ## Export Details
 
