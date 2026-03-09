@@ -81,6 +81,67 @@ interface ClipInput {
   hasAudio: boolean;
 }
 
+const ADJACENT_THRESHOLD = 0.05;
+
+function getClipDuration(c: Clip): number {
+  return c.outPoint - c.inPoint;
+}
+
+function clipTimelineEnd(c: Clip): number {
+  return c.timelineStart + getClipDuration(c);
+}
+
+/**
+ * Build a volume expression that handles fade-in/out with adjacent clip volume transitions.
+ * Uses ffmpeg's volume filter with eval=frame for per-frame volume calculation.
+ * `t` is the time within the clip (0 to dur).
+ */
+function buildVolumeExpression(
+  vol: number,
+  fadeIn: number,
+  fadeOut: number,
+  dur: number,
+  prevVol: number,
+  nextVol: number,
+): string {
+  // If no fades and volume is 1, no filter needed
+  if (fadeIn <= 0 && fadeOut <= 0 && vol === 1) return '';
+
+  // Build expression parts
+  // Default: clip volume
+  // Fade in: lerp from prevVol to vol over fadeIn
+  // Fade out: lerp from vol to nextVol over fadeOut
+  const fadeOutStart = Math.max(0, dur - fadeOut);
+
+  if (fadeIn > 0 && fadeOut > 0) {
+    return `volume='if(lt(t,${fadeIn}),${prevVol}+(${vol}-${prevVol})*t/${fadeIn},if(gt(t,${fadeOutStart}),${vol}+(${nextVol}-${vol})*(t-${fadeOutStart})/${fadeOut},${vol}))':eval=frame`;
+  } else if (fadeIn > 0) {
+    return `volume='if(lt(t,${fadeIn}),${prevVol}+(${vol}-${prevVol})*t/${fadeIn},${vol})':eval=frame`;
+  } else if (fadeOut > 0) {
+    return `volume='if(gt(t,${fadeOutStart}),${vol}+(${nextVol}-${vol})*(t-${fadeOutStart})/${fadeOut},${vol})':eval=frame`;
+  } else {
+    return `volume=${vol}`;
+  }
+}
+
+function findAdjacentVolumes(sorted: ClipInput[], index: number): { prevVol: number; nextVol: number } {
+  let prevVol = 0;
+  let nextVol = 0;
+  if (index > 0) {
+    const prev = sorted[index - 1];
+    if (Math.abs(clipTimelineEnd(prev.clip) - sorted[index].clip.timelineStart) < ADJACENT_THRESHOLD) {
+      prevVol = prev.clip.volume ?? 1;
+    }
+  }
+  if (index < sorted.length - 1) {
+    const next = sorted[index + 1];
+    if (Math.abs(clipTimelineEnd(sorted[index].clip) - next.clip.timelineStart) < ADJACENT_THRESHOLD) {
+      nextVol = next.clip.volume ?? 1;
+    }
+  }
+  return { prevVol, nextVol };
+}
+
 export async function startExport(
   config: ProjectConfig,
   callbacks?: ExportCallbacks,
@@ -204,20 +265,22 @@ export async function startExport(
         );
 
         // Audio for video clips
-        const clipVolume = input.clip.volume ?? 1;
+        const clipVol = input.clip.volume ?? 1;
         let aLabel: string;
         if (input.hasAudio) {
           const volLabel = `va${i}`;
+          const { prevVol, nextVol } = findAdjacentVolumes(sortedVideo, i);
+          const volExpr = buildVolumeExpression(
+            clipVol,
+            input.clip.fadeIn ?? 0,
+            input.clip.fadeOut ?? 0,
+            clipDuration,
+            prevVol,
+            nextVol,
+          );
           let audioFilter = `[${idx}:a:0]aresample=48000`;
-          if (clipVolume !== 1) {
-            audioFilter += `,volume=${clipVolume}`;
-          }
-          if ((input.clip.fadeIn ?? 0) > 0) {
-            audioFilter += `,afade=t=in:d=${input.clip.fadeIn}`;
-          }
-          if ((input.clip.fadeOut ?? 0) > 0) {
-            const fadeOutStart = Math.max(0, clipDuration - input.clip.fadeOut);
-            audioFilter += `,afade=t=out:st=${fadeOutStart}:d=${input.clip.fadeOut}`;
+          if (volExpr) {
+            audioFilter += `,${volExpr}`;
           }
           audioFilter += `[${volLabel}]`;
           filterParts.push(audioFilter);
@@ -250,16 +313,18 @@ export async function startExport(
         const clipDuration = input.clip.outPoint - input.clip.inPoint;
         const label = `at${i}`;
 
+        const { prevVol, nextVol } = findAdjacentVolumes(sortedAudio, i);
+        const volExpr = buildVolumeExpression(
+          clipVolume,
+          input.clip.fadeIn ?? 0,
+          input.clip.fadeOut ?? 0,
+          clipDuration,
+          prevVol,
+          nextVol,
+        );
         let audioFilter = `[${idx}:a:0]aresample=48000`;
-        if (clipVolume !== 1) {
-          audioFilter += `,volume=${clipVolume}`;
-        }
-        if ((input.clip.fadeIn ?? 0) > 0) {
-          audioFilter += `,afade=t=in:d=${input.clip.fadeIn}`;
-        }
-        if ((input.clip.fadeOut ?? 0) > 0) {
-          const fadeOutStart = Math.max(0, clipDuration - input.clip.fadeOut);
-          audioFilter += `,afade=t=out:st=${fadeOutStart}:d=${input.clip.fadeOut}`;
+        if (volExpr) {
+          audioFilter += `,${volExpr}`;
         }
         // Delay to position at timeline start (adelay takes milliseconds)
         const delayMs = Math.round(input.clip.timelineStart * 1000);
@@ -276,7 +341,7 @@ export async function startExport(
         filterParts.push(`${audioMixInputs[0]}acopy[audio_track]`);
       } else {
         filterParts.push(
-          `${audioMixInputs.join('')}amix=inputs=${audioMixInputs.length}:duration=longest:dropout_transition=0[audio_track]`,
+          `${audioMixInputs.join('')}amix=inputs=${audioMixInputs.length}:duration=longest:dropout_transition=0:normalize=0[audio_track]`,
         );
       }
     }
@@ -284,7 +349,7 @@ export async function startExport(
     // Final mix: combine video audio and audio track
     if (hasVideoTrack && hasAudioTrack) {
       filterParts.push(
-        `[video_audio][audio_track]amix=inputs=2:duration=longest:dropout_transition=0[outa]`,
+        `[video_audio][audio_track]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[outa]`,
       );
       args.push('-filter_complex', filterParts.join(';'));
       args.push('-map', '[outv]', '-map', '[outa]');

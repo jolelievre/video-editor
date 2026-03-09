@@ -6,7 +6,7 @@ export const clipSchema = z.object({
   inPoint: z.number().min(0),
   outPoint: z.number().min(0),
   timelineStart: z.number().min(0),
-  volume: z.number().min(0).max(2).default(1),
+  volume: z.number().min(0).max(1.5).default(1),
   fadeIn: z.number().min(0).default(0),
   fadeOut: z.number().min(0).default(0),
 });

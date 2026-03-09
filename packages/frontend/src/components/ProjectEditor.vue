@@ -39,7 +39,19 @@
           :active-audio-clip-id="preview.activeAudioClip.value?.id ?? null"
           :active-source-type="preview.activeSourceType.value"
           :clip-volume="preview.activeVideoClip.value?.volume ?? 1"
+          :clip-fade-in="preview.activeVideoClip.value?.fadeIn ?? 0"
+          :clip-fade-out="preview.activeVideoClip.value?.fadeOut ?? 0"
+          :clip-timeline-start="preview.activeVideoClip.value?.timelineStart ?? 0"
+          :clip-duration="(preview.activeVideoClip.value?.outPoint ?? 0) - (preview.activeVideoClip.value?.inPoint ?? 0)"
+          :clip-prev-volume="videoAdjacentVols.prev"
+          :clip-next-volume="videoAdjacentVols.next"
           :audio-clip-volume="preview.activeAudioClip.value?.volume ?? 1"
+          :audio-clip-fade-in="preview.activeAudioClip.value?.fadeIn ?? 0"
+          :audio-clip-fade-out="preview.activeAudioClip.value?.fadeOut ?? 0"
+          :audio-clip-timeline-start="preview.activeAudioClip.value?.timelineStart ?? 0"
+          :audio-clip-duration="(preview.activeAudioClip.value?.outPoint ?? 0) - (preview.activeAudioClip.value?.inPoint ?? 0)"
+          :audio-clip-prev-volume="audioAdjacentVols.prev"
+          :audio-clip-next-volume="audioAdjacentVols.next"
           :image-url="imagePreviewUrl"
           :seek-generation="preview.seekGeneration.value"
           @toggle-play="togglePlay"
@@ -97,6 +109,38 @@ const selectedSource = computed<SourceFile | null>(() => {
   if (!store.config || !selectedClip.value) return null;
   return store.config.sources.find((s) => s.id === selectedClip.value!.sourceId) ?? null;
 });
+
+const ADJACENT_THRESHOLD = 0.05;
+
+function clipEnd(c: Clip): number {
+  return c.timelineStart + (c.outPoint - c.inPoint);
+}
+
+function getAdjacentVolumes(clip: Clip | null, trackType: 'video' | 'audio'): { prev: number; next: number } {
+  if (!clip || !store.config) return { prev: 0, next: 0 };
+  const track = store.config.timeline.tracks.find((t) => (t.type ?? 'video') === trackType);
+  if (!track) return { prev: 0, next: 0 };
+  const sorted = [...track.clips].sort((a, b) => a.timelineStart - b.timelineStart);
+  const idx = sorted.findIndex((c) => c.id === clip.id);
+  let prev = 0;
+  let next = 0;
+  if (idx > 0) {
+    const prevClip = sorted[idx - 1];
+    if (Math.abs(clipEnd(prevClip) - clip.timelineStart) < ADJACENT_THRESHOLD) {
+      prev = prevClip.volume ?? 1;
+    }
+  }
+  if (idx >= 0 && idx < sorted.length - 1) {
+    const nextClip = sorted[idx + 1];
+    if (Math.abs(clipEnd(clip) - nextClip.timelineStart) < ADJACENT_THRESHOLD) {
+      next = nextClip.volume ?? 1;
+    }
+  }
+  return { prev, next };
+}
+
+const videoAdjacentVols = computed(() => getAdjacentVolumes(preview.activeVideoClip.value, 'video'));
+const audioAdjacentVols = computed(() => getAdjacentVolumes(preview.activeAudioClip.value, 'audio'));
 
 const imagePreviewUrl = computed<string | null>(() => {
   if (preview.activeSourceType.value !== 'image') return null;

@@ -5,10 +5,15 @@
     :style="clipStyle"
     @mousedown.stop="onSelect"
   >
-    <!-- Fade-in indicator -->
-    <div v-if="clip.fadeIn > 0" class="fade-indicator fade-in" :style="fadeInStyle" />
-    <!-- Fade-out indicator -->
-    <div v-if="clip.fadeOut > 0" class="fade-indicator fade-out" :style="fadeOutStyle" />
+    <!-- Volume envelope SVG overlay -->
+    <svg
+      v-if="showEnvelope"
+      class="volume-envelope"
+      :viewBox="`0 0 ${clipWidthPx} 48`"
+      preserveAspectRatio="none"
+    >
+      <path :d="envelopePath" fill="rgba(255, 200, 50, 0.25)" stroke="rgba(255, 200, 50, 0.8)" stroke-width="1.5" />
+    </svg>
 
     <div class="handle left" @mousedown.stop="startTrim('in', $event)" />
     <div class="clip-body" @mousedown.stop="startDrag($event)">
@@ -83,13 +88,83 @@ const clipStyle = computed(() => ({
   width: `${clipWidthPx.value}px`,
 }));
 
-const fadeInStyle = computed(() => ({
-  width: `${Math.min(props.clip.fadeIn * props.zoom, clipWidthPx.value)}px`,
-}));
+// Volume envelope: 100% at 2/3 of clip height (leaving room for >100% volumes)
+// Max displayed volume is 1.5 (150%), mapped to full height
+const ENVELOPE_HEIGHT = 48;
+const MAX_DISPLAY_VOLUME = 1.5;
+const ADJACENT_THRESHOLD = 0.05; // seconds — clips closer than this are considered adjacent
 
-const fadeOutStyle = computed(() => ({
-  width: `${Math.min(props.clip.fadeOut * props.zoom, clipWidthPx.value)}px`,
-}));
+function volumeToY(vol: number): number {
+  const clamped = Math.min(vol, MAX_DISPLAY_VOLUME);
+  return ENVELOPE_HEIGHT * (1 - clamped / MAX_DISPLAY_VOLUME);
+}
+
+function clipEnd(c: Clip): number {
+  return c.timelineStart + (c.outPoint - c.inPoint);
+}
+
+const adjacentVolumes = computed(() => {
+  const sorted = [...props.trackClips].sort((a, b) => a.timelineStart - b.timelineStart);
+  const idx = sorted.findIndex((c) => c.id === props.clip.id);
+  let prevVol = 0;
+  let nextVol = 0;
+  if (idx > 0) {
+    const prev = sorted[idx - 1];
+    if (Math.abs(clipEnd(prev) - props.clip.timelineStart) < ADJACENT_THRESHOLD) {
+      prevVol = prev.volume ?? 1;
+    }
+  }
+  if (idx >= 0 && idx < sorted.length - 1) {
+    const next = sorted[idx + 1];
+    if (Math.abs(clipEnd(props.clip) - next.timelineStart) < ADJACENT_THRESHOLD) {
+      nextVol = next.volume ?? 1;
+    }
+  }
+  return { prevVol, nextVol };
+});
+
+const showEnvelope = computed(() => {
+  const vol = props.clip.volume ?? 1;
+  return (props.clip.fadeIn ?? 0) > 0 || (props.clip.fadeOut ?? 0) > 0 || vol !== 1;
+});
+
+const envelopePath = computed(() => {
+  const w = clipWidthPx.value;
+  const clipDuration = props.clip.outPoint - props.clip.inPoint;
+  if (clipDuration <= 0 || w <= 0) return '';
+
+  const vol = props.clip.volume ?? 1;
+  const fadeInPx = Math.min((props.clip.fadeIn ?? 0) * props.zoom, w);
+  const fadeOutPx = Math.min((props.clip.fadeOut ?? 0) * props.zoom, w);
+  const { prevVol, nextVol } = adjacentVolumes.value;
+  const volY = volumeToY(vol);
+  const fadeInStartY = volumeToY(prevVol);
+  const fadeOutEndY = volumeToY(nextVol);
+  const bottomY = ENVELOPE_HEIGHT;
+
+  const points: string[] = [];
+  // Bottom-left corner
+  points.push(`M 0 ${bottomY}`);
+  // Fade-in start point (at adjacent clip's volume or bottom)
+  if (fadeInPx > 0) {
+    points.push(`L 0 ${fadeInStartY}`);
+    points.push(`L ${fadeInPx} ${volY}`);
+  } else {
+    points.push(`L 0 ${volY}`);
+  }
+  // Flat at clip volume
+  if (fadeOutPx > 0) {
+    points.push(`L ${w - fadeOutPx} ${volY}`);
+    points.push(`L ${w} ${fadeOutEndY}`);
+  } else {
+    points.push(`L ${w} ${volY}`);
+  }
+  // Bottom-right and close
+  points.push(`L ${w} ${bottomY}`);
+  points.push('Z');
+
+  return points.join(' ');
+});
 
 const imageStreamUrl = computed(() => {
   if (!props.source) return '';
@@ -227,24 +302,13 @@ function formatDuration(seconds: number): string {
   box-shadow: 0 0 8px rgba(255, 159, 67, 0.5);
 }
 
-.fade-indicator {
+.volume-envelope {
   position: absolute;
-  top: 0;
-  height: 100%;
+  inset: 0;
   z-index: 4;
   pointer-events: none;
-}
-
-.fade-indicator.fade-in {
-  left: 0;
-  background: linear-gradient(to right, rgba(255, 255, 255, 0.3), transparent);
-  border-left: 2px solid rgba(255, 255, 255, 0.5);
-}
-
-.fade-indicator.fade-out {
-  right: 0;
-  background: linear-gradient(to left, rgba(255, 255, 255, 0.3), transparent);
-  border-right: 2px solid rgba(255, 255, 255, 0.5);
+  width: 100%;
+  height: 100%;
 }
 
 .handle {

@@ -62,7 +62,19 @@ const props = defineProps<{
   activeAudioClipId: string | null;
   activeSourceType: 'video' | 'image' | null;
   clipVolume: number;
+  clipFadeIn: number;
+  clipFadeOut: number;
+  clipTimelineStart: number;
+  clipDuration: number;
+  clipPrevVolume: number;
+  clipNextVolume: number;
   audioClipVolume: number;
+  audioClipFadeIn: number;
+  audioClipFadeOut: number;
+  audioClipTimelineStart: number;
+  audioClipDuration: number;
+  audioClipPrevVolume: number;
+  audioClipNextVolume: number;
   imageUrl: string | null;
   seekGeneration: number;
 }>();
@@ -94,17 +106,63 @@ const volumeIcon = computed(() => {
   return '\uD83D\uDD0A';
 });
 
+function computeFadeMultiplier(
+  playhead: number,
+  clipVolume: number,
+  fadeIn: number,
+  fadeOut: number,
+  timelineStart: number,
+  clipDuration: number,
+  prevClipVolume: number,
+  nextClipVolume: number,
+): number {
+  if (clipDuration <= 0) return clipVolume;
+  const elapsed = playhead - timelineStart;
+  // Fade in: ramp from prevClipVolume to clipVolume
+  if (fadeIn > 0 && elapsed < fadeIn) {
+    const t = elapsed / fadeIn;
+    return prevClipVolume + (clipVolume - prevClipVolume) * t;
+  }
+  // Fade out: ramp from clipVolume to nextClipVolume
+  if (fadeOut > 0 && elapsed > clipDuration - fadeOut) {
+    const remaining = clipDuration - elapsed;
+    const t = Math.max(0, remaining / fadeOut);
+    return nextClipVolume + (clipVolume - nextClipVolume) * t;
+  }
+  return clipVolume;
+}
+
 function applyVideoVolume() {
   const video = videoEl.value;
   if (!video) return;
-  video.volume = Math.min(1, masterVolume.value * props.clipVolume);
+  const effectiveVolume = computeFadeMultiplier(
+    props.playheadPosition,
+    props.clipVolume,
+    props.clipFadeIn,
+    props.clipFadeOut,
+    props.clipTimelineStart,
+    props.clipDuration,
+    props.clipPrevVolume,
+    props.clipNextVolume,
+  );
+  video.volume = Math.min(1, masterVolume.value * effectiveVolume);
   video.muted = muted.value;
 }
 
 function applyAudioVolume() {
   const audio = audioEl.value;
   if (!audio) return;
-  audio.volume = Math.min(1, masterVolume.value * props.audioClipVolume);
+  const effectiveVolume = computeFadeMultiplier(
+    props.playheadPosition,
+    props.audioClipVolume,
+    props.audioClipFadeIn,
+    props.audioClipFadeOut,
+    props.audioClipTimelineStart,
+    props.audioClipDuration,
+    props.audioClipPrevVolume,
+    props.audioClipNextVolume,
+  );
+  audio.volume = Math.min(1, masterVolume.value * effectiveVolume);
   audio.muted = muted.value;
 }
 
@@ -206,9 +264,15 @@ watch(
   },
 );
 
-// Watch clip volume changes
+// Watch clip volume changes and playhead position (for fade effects)
 watch(() => props.clipVolume, applyVideoVolume);
 watch(() => props.audioClipVolume, applyAudioVolume);
+watch(() => props.playheadPosition, () => {
+  if (props.isPlaying) {
+    applyVideoVolume();
+    applyAudioVolume();
+  }
+});
 
 // Initial load on mount
 onMounted(() => {

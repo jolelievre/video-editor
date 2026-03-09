@@ -27,7 +27,7 @@
           <input
             type="range"
             min="0"
-            max="200"
+            max="150"
             step="1"
             :value="Math.round((clip.volume ?? 1) * 100)"
             @input="onVolumeChange"
