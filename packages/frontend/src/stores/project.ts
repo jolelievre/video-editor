@@ -174,26 +174,24 @@ export const useProjectStore = defineStore('project', () => {
         // Reorder: place clip at desired position, sort, resolve overlaps
         clip.timelineStart = Math.round(Math.max(0, desiredStart) * 100) / 100;
         track.clips.sort((a, b) => a.timelineStart - b.timelineStart);
-
-        // Push overlapping clips to the right
-        for (let i = 0; i < track.clips.length - 1; i++) {
-          const current = track.clips[i];
-          const currentEnd = getClipEnd(current);
-          const nextClip = track.clips[i + 1];
-          if (nextClip.timelineStart < currentEnd) {
-            nextClip.timelineStart = Math.round(currentEnd * 100) / 100;
-          }
-        }
       } else {
-        // Constrained move: clamp between neighbors
+        // Constrained move: clamp to previous clip but allow pushing next clips
         let clamped = Math.max(0, desiredStart);
         if (prev) {
           clamped = Math.max(prevEnd, clamped);
         }
-        if (next) {
-          clamped = Math.min(nextStart - clipDuration, clamped);
-        }
         clip.timelineStart = Math.round(Math.max(0, clamped) * 100) / 100;
+      }
+
+      // Push overlapping clips to the right
+      track.clips.sort((a, b) => a.timelineStart - b.timelineStart);
+      for (let i = 0; i < track.clips.length - 1; i++) {
+        const current = track.clips[i];
+        const currentEnd = getClipEnd(current);
+        const nextClip = track.clips[i + 1];
+        if (nextClip.timelineStart < currentEnd) {
+          nextClip.timelineStart = Math.round(currentEnd * 100) / 100;
+        }
       }
 
       debouncedSave();
@@ -396,17 +394,25 @@ export const useProjectStore = defineStore('project', () => {
       const sorted = [...track.textClips].sort((a, b) => a.timelineStart - b.timelineStart);
       const idx = sorted.findIndex((c) => c.id === clipId);
       const prev = idx > 0 ? sorted[idx - 1] : null;
-      const next = idx < sorted.length - 1 ? sorted[idx + 1] : null;
 
       let clamped = Math.max(0, desiredStart);
       if (prev) {
         clamped = Math.max(prev.timelineStart + prev.duration, clamped);
       }
-      if (next) {
-        clamped = Math.min(next.timelineStart - tc.duration, clamped);
-      }
 
       tc.timelineStart = Math.round(Math.max(0, clamped) * 100) / 100;
+
+      // Push overlapping clips to the right
+      const reSorted = track.textClips.sort((a, b) => a.timelineStart - b.timelineStart);
+      for (let i = 0; i < reSorted.length - 1; i++) {
+        const current = reSorted[i];
+        const currentEnd = current.timelineStart + current.duration;
+        const nextTc = reSorted[i + 1];
+        if (nextTc.timelineStart < currentEnd) {
+          nextTc.timelineStart = Math.round(currentEnd * 100) / 100;
+        }
+      }
+
       debouncedSave();
       return;
     }
