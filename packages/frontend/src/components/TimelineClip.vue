@@ -294,8 +294,13 @@ function formatDuration(seconds: number): string {
 }
 
 .clip.selected {
-  border-color: #6c63ff;
-  box-shadow: 0 0 6px rgba(108, 99, 255, 0.4);
+  border-color: #ffd600;
+  box-shadow: 0 0 6px rgba(255, 214, 0, 0.4);
+}
+
+.clip.selected .handle.left,
+.clip.selected .handle.right {
+  background: rgba(255, 214, 0, 0.6);
 }
 
 .clip.active {

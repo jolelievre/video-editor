@@ -48,6 +48,18 @@ export interface TextStyle {
   italic: boolean;
 }
 
+export type TextAnimationType = 'none' | 'fade' | 'slide' | 'typewriter';
+export type SlideDirection = 'left' | 'right' | 'top' | 'bottom';
+
+export type TypewriterAlignment = 'center' | 'left';
+
+export interface TextAnimation {
+  type: TextAnimationType;
+  duration: number; // seconds (0 = instant)
+  direction?: SlideDirection; // only for slide type
+  alignment?: TypewriterAlignment; // only for typewriter type, default 'center'
+}
+
 export interface TextClip {
   id: string;
   content: string; // single-line
@@ -58,4 +70,6 @@ export interface TextClip {
     x: number; // 0-100, percentage of video width (center point)
     y: number; // 0-100, percentage of video height (center point)
   };
+  animationIn?: TextAnimation;
+  animationOut?: TextAnimation;
 }

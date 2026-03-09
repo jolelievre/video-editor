@@ -22,6 +22,13 @@ export const textStyleSchema = z.object({
   italic: z.boolean().default(false),
 });
 
+export const textAnimationSchema = z.object({
+  type: z.enum(['none', 'fade', 'slide', 'typewriter']).default('none'),
+  duration: z.number().min(0).max(30).default(0),
+  direction: z.enum(['left', 'right', 'top', 'bottom']).optional(),
+  alignment: z.enum(['center', 'left']).optional(),
+});
+
 export const textClipSchema = z.object({
   id: z.string().min(1),
   content: z.string().min(1),
@@ -32,6 +39,8 @@ export const textClipSchema = z.object({
     x: z.number().min(0).max(100).default(50),
     y: z.number().min(0).max(100).default(50),
   }),
+  animationIn: textAnimationSchema.default({ type: 'none', duration: 0 }),
+  animationOut: textAnimationSchema.default({ type: 'none', duration: 0 }),
 });
 
 export const trackSchema = z.object({

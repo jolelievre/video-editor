@@ -1,4 +1,15 @@
-export type { ProjectConfig, SourceFile, Track, Clip, TextStyle, TextClip } from './types.js';
+export type {
+  ProjectConfig,
+  SourceFile,
+  Track,
+  Clip,
+  TextStyle,
+  TextClip,
+  TextAnimation,
+  TextAnimationType,
+  SlideDirection,
+  TypewriterAlignment,
+} from './types.js';
 export {
   projectConfigSchema,
   sourceFileSchema,
@@ -6,6 +17,7 @@ export {
   clipSchema,
   textStyleSchema,
   textClipSchema,
+  textAnimationSchema,
 } from './schema.js';
 export type { ProjectConfigSchema, SourceFileSchema, TrackSchema, ClipSchema } from './schema.js';
 export { DATA_DIR } from './config.js';

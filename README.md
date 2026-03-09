@@ -1,14 +1,21 @@
 # Video Editor
 
-A web-based video editor built with Vue 3 and Fastify. Upload video files, arrange clips on a timeline, preview the result in real time, and export the final cut as an MP4.
+A web-based video editor built with Vue 3 and Fastify. Upload video, image, and audio files, arrange clips on a multi-track timeline, add text overlays with animations, preview the result in real time, and export the final cut as an MP4.
 
 ## Features
 
 - **Project management** — Create, rename, and delete editing projects
-- **File upload** — Upload video source files to a project
-- **Timeline editing** — Drag and drop sources onto a multi-track timeline, reorder clips, trim in/out points, and zoom the timeline view
-- **Video preview** — Real-time playback driven by the timeline playhead with play/pause, seeking, scrubbing, and volume control
-- **Export** — Concatenate timeline clips into a single MP4 using FFmpeg, with progress tracking and download
+- **File upload** — Upload video, image, and audio source files (up to 500 MB each)
+- **Multi-media support** — Video (MP4, WebM, MOV, AVI, MKV), images (PNG, JPG, GIF, WebP, BMP, TIFF), and audio (MP3, WAV, AAC, OGG, FLAC, M4A, WMA)
+- **Timeline editing** — Multi-track timeline with drag-and-drop, clip reordering, trimming in/out points, splitting clips at the playhead (`C` key), and zoom control
+- **Audio mixing** — Dedicated audio tracks with per-clip volume (0-150%), fade in/out envelopes, and smooth volume transitions between adjacent clips
+- **Image clips** — Images placed on the video track with a configurable duration (default 5s)
+- **Text overlays** — Add text tracks with styled text clips (10 bundled fonts, font size, color, bold/italic), positioned via drag in the preview or percentage sliders in the inspector
+- **Text animations** — Entrance and exit animations for text clips: fade, slide (left/right/top/bottom), and typewriter (center or left-aligned)
+- **Video preview** — Real-time playback driven by the timeline playhead with play/pause, seeking, scrubbing, volume control, and live text overlay rendering with animation preview
+- **Thumbnails** — Auto-generated thumbnails for video (6 frames) and image (1 frame) sources
+- **Bundled fonts** — 10 font families with bold/italic variants served via the API for both preview and FFmpeg export
+- **Export** — Render the full timeline to a single MP4 using FFmpeg (H.264 + AAC), with progress tracking, gap filling, multi-track audio mixing, text overlay rendering, and download
 
 ## Tech Stack
 
@@ -140,21 +147,60 @@ VIDEO_EDITOR_DATA_DIR=/path/to/data npm run dev -w packages/server
 
 ## API Overview
 
-All routes are prefixed with `/api/projects`.
+All project routes are prefixed with `/api/projects`. Font routes are under `/api/fonts`.
 
-| Method   | Route                                        | Description                                     |
-| -------- | -------------------------------------------- | ----------------------------------------------- |
-| `GET`    | `/api/projects`                              | List all projects                               |
-| `POST`   | `/api/projects`                              | Create a new project                            |
-| `GET`    | `/api/projects/:id`                          | Get project config                              |
-| `PUT`    | `/api/projects/:id`                          | Update project config                           |
-| `DELETE` | `/api/projects/:id`                          | Delete a project                                |
-| `POST`   | `/api/projects/:id/sources`                  | Upload a source file                            |
-| `DELETE` | `/api/projects/:id/sources/:sourceId`        | Delete a source file                            |
-| `GET`    | `/api/projects/:id/sources/:sourceId/stream` | Stream a source video (supports range requests) |
-| `POST`   | `/api/projects/:id/export`                   | Start an export job                             |
-| `GET`    | `/api/projects/:id/export/status`            | Poll export progress                            |
-| `GET`    | `/api/projects/:id/export/download`          | Download the exported MP4                       |
+| Method   | Route                                              | Description                                                    |
+| -------- | -------------------------------------------------- | -------------------------------------------------------------- |
+| `GET`    | `/api/projects`                                    | List all projects                                              |
+| `POST`   | `/api/projects`                                    | Create a new project                                           |
+| `GET`    | `/api/projects/:id`                                | Get project config                                             |
+| `PUT`    | `/api/projects/:id`                                | Update project config (rename, modify timeline, etc.)          |
+| `DELETE` | `/api/projects/:id`                                | Delete a project                                               |
+| `POST`   | `/api/projects/:id/sources`                        | Upload a source file (multipart, max 500 MB)                   |
+| `DELETE` | `/api/projects/:id/sources/:sourceId`              | Delete a source file                                           |
+| `GET`    | `/api/projects/:id/sources/:sourceId/stream`       | Stream a source file (supports range requests)                 |
+| `GET`    | `/api/projects/:id/sources/:sourceId/thumb/:index` | Get a thumbnail for a source (auto-generated on first request) |
+| `POST`   | `/api/projects/:id/export`                         | Start an export job                                            |
+| `GET`    | `/api/projects/:id/export/status`                  | Poll export progress                                           |
+| `GET`    | `/api/projects/:id/export/download`                | Download the exported MP4                                      |
+| `GET`    | `/api/fonts`                                       | List all bundled fonts with metadata                           |
+| `GET`    | `/api/fonts/:filename`                             | Download a font file (TTF)                                     |
+
+## Bundled Fonts
+
+10 font families are included for text overlays. Each font is available in the preview and used by FFmpeg during export.
+
+| Font             | Regular | Bold | Italic | Bold Italic |
+| ---------------- | ------- | ---- | ------ | ----------- |
+| Roboto           | yes     | yes  | yes    | yes         |
+| Open Sans        | yes     | yes  | yes    | yes         |
+| Montserrat       | yes     | yes  | yes    | yes         |
+| Lato             | yes     | yes  | yes    | yes         |
+| Oswald           | yes     | yes  | -      | -           |
+| Playfair Display | yes     | yes  | yes    | yes         |
+| Source Code Pro  | yes     | yes  | yes    | yes         |
+| Bebas Neue       | yes     | -    | -      | -           |
+| Permanent Marker | yes     | -    | -      | -           |
+| Dancing Script   | yes     | yes  | -      | -           |
+
+## Export Details
+
+The export pipeline renders the full timeline into a single MP4 file:
+
+- **Video codec**: H.264 (libx264), medium preset, CRF 23
+- **Audio codec**: AAC at 192 kbps, 48 kHz sample rate
+- **Format**: MP4 with `faststart` for web streaming
+- **Gap handling**: Timeline gaps are filled with black frames and silent audio
+- **Audio mixing**: Video-track audio and audio-track clips are mixed together; per-clip volume, fade envelopes, and adjacent clip transitions are applied via per-frame expressions
+- **Text rendering**: Text overlays are rendered using FFmpeg's `drawtext` filter chain, supporting fade (alpha expression), slide (animated x/y), and typewriter (chained filters per character)
+- **Image clips**: Images are looped for their configured duration
+- **Text/audio-only**: Exports with no video clips generate a black background; exports with no audio generate silence
+
+## Project Config Schema Reference
+
+The project configuration is stored as `data/projects/<id>/config.json` and serves as the single source of truth. The full schema reference with field-by-field documentation, validation rules, and a complete JSON example is available in **[docs/schema-reference.md](docs/schema-reference.md)**. It is designed so that an AI agent or external tool can generate valid configurations programmatically.
+
+The Zod schema source is at `packages/shared/src/schema.ts`.
 
 ## License
 

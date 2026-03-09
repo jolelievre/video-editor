@@ -170,6 +170,155 @@ function collectTextClips(config: ProjectConfig): TextClip[] {
   return result.sort((a, b) => a.timelineStart - b.timelineStart);
 }
 
+function buildAlphaExpression(tc: TextClip): string | null {
+  const animIn = tc.animationIn;
+  const animOut = tc.animationOut;
+  const start = tc.timelineStart;
+  const dur = tc.duration;
+
+  const hasFadeIn = animIn?.type === 'fade' && animIn.duration > 0;
+  const hasFadeOut = animOut?.type === 'fade' && animOut.duration > 0;
+
+  if (!hasFadeIn && !hasFadeOut) return null;
+
+  // elapsed = t - START
+  const elapsed = `(t-${start.toFixed(3)})`;
+
+  if (hasFadeIn && hasFadeOut) {
+    const fi = animIn.duration.toFixed(3);
+    const fo = animOut.duration.toFixed(3);
+    const fadeOutStart = (dur - animOut.duration).toFixed(3);
+    return `if(lt(${elapsed}\\,${fi})\\,${elapsed}/${fi}\\,1)*if(gt(${elapsed}\\,${fadeOutStart})\\,(${dur.toFixed(3)}-${elapsed})/${fo}\\,1)`;
+  } else if (hasFadeIn) {
+    const fi = animIn.duration.toFixed(3);
+    return `if(lt(${elapsed}\\,${fi})\\,${elapsed}/${fi}\\,1)`;
+  } else {
+    const fo = animOut!.duration.toFixed(3);
+    const fadeOutStart = (dur - animOut!.duration).toFixed(3);
+    return `if(gt(${elapsed}\\,${fadeOutStart})\\,(${dur.toFixed(3)}-${elapsed})/${fo}\\,1)`;
+  }
+}
+
+function buildAnimatedX(tc: TextClip): string {
+  const targetX = `min(max(0\\,w*${tc.position.x}/100-tw/2)\\,w-tw)`;
+  const start = tc.timelineStart;
+  const dur = tc.duration;
+  const animIn = tc.animationIn;
+  const animOut = tc.animationOut;
+  const elapsed = `(t-${start.toFixed(3)})`;
+  const remaining = `(${(start + dur).toFixed(3)}-t)`;
+
+  const hasSlideInX =
+    animIn?.type === 'slide' &&
+    animIn.duration > 0 &&
+    (animIn.direction === 'left' || animIn.direction === 'right');
+  const hasSlideOutX =
+    animOut?.type === 'slide' &&
+    animOut.duration > 0 &&
+    (animOut.direction === 'left' || animOut.direction === 'right');
+
+  if (!hasSlideInX && !hasSlideOutX) return targetX;
+
+  let expr = targetX;
+
+  if (hasSlideInX) {
+    const fi = animIn.duration.toFixed(3);
+    const offscreen = animIn.direction === 'left' ? '(-tw)' : 'w';
+    // lerp from offscreen to target: offscreen + (target - offscreen) * min(elapsed/dur, 1)
+    expr = `if(lt(${elapsed}\\,${fi})\\,${offscreen}+(${targetX}-${offscreen})*${elapsed}/${fi}\\,${expr})`;
+  }
+
+  if (hasSlideOutX) {
+    const fo = animOut.duration.toFixed(3);
+    const offscreen = animOut.direction === 'left' ? '(-tw)' : 'w';
+    expr = `if(lt(${remaining}\\,${fo})\\,${targetX}+(${offscreen}-${targetX})*(${fo}-${remaining})/${fo}\\,${expr})`;
+  }
+
+  return expr;
+}
+
+function buildAnimatedY(tc: TextClip): string {
+  const targetY = `min(max(0\\,h*${tc.position.y}/100-th/2)\\,h-th)`;
+  const start = tc.timelineStart;
+  const dur = tc.duration;
+  const animIn = tc.animationIn;
+  const animOut = tc.animationOut;
+  const elapsed = `(t-${start.toFixed(3)})`;
+  const remaining = `(${(start + dur).toFixed(3)}-t)`;
+
+  const hasSlideInY =
+    animIn?.type === 'slide' &&
+    animIn.duration > 0 &&
+    (animIn.direction === 'top' || animIn.direction === 'bottom');
+  const hasSlideOutY =
+    animOut?.type === 'slide' &&
+    animOut.duration > 0 &&
+    (animOut.direction === 'top' || animOut.direction === 'bottom');
+
+  if (!hasSlideInY && !hasSlideOutY) return targetY;
+
+  let expr = targetY;
+
+  if (hasSlideInY) {
+    const fi = animIn.duration.toFixed(3);
+    const offscreen = animIn.direction === 'top' ? '(-th)' : 'h';
+    expr = `if(lt(${elapsed}\\,${fi})\\,${offscreen}+(${targetY}-${offscreen})*${elapsed}/${fi}\\,${expr})`;
+  }
+
+  if (hasSlideOutY) {
+    const fo = animOut.duration.toFixed(3);
+    const offscreen = animOut.direction === 'top' ? '(-th)' : 'h';
+    expr = `if(lt(${remaining}\\,${fo})\\,${targetY}+(${offscreen}-${targetY})*(${fo}-${remaining})/${fo}\\,${expr})`;
+  }
+
+  return expr;
+}
+
+function buildTypewriterFilters(tc: TextClip, inLabel: string, outLabel: string): string[] {
+  const animIn = tc.animationIn;
+  if (!animIn || animIn.type !== 'typewriter' || animIn.duration <= 0) return [];
+
+  const fontPath = resolveFontPath(tc.style.fontFamily, tc.style.bold, tc.style.italic);
+  const hexColor = `0x${tc.style.color.replace('#', '')}`;
+  const start = tc.timelineStart;
+  const end = start + tc.duration;
+  const charCount = tc.content.length;
+  const charDelay = animIn.duration / charCount;
+
+  const alphaExpr = buildAlphaExpression(tc);
+  const isLeftAligned = animIn.alignment === 'left';
+  // For left-aligned typewriter, anchor at left edge instead of center
+  const xExpr = isLeftAligned ? `min(max(0\\,w*${tc.position.x}/100)\\,w-tw)` : buildAnimatedX(tc);
+  const yExpr = buildAnimatedY(tc);
+
+  const filters: string[] = [];
+  for (let i = 0; i < charCount; i++) {
+    const partialText = escapeDrawtext(tc.content.slice(0, i + 1));
+    const charStart = (start + i * charDelay).toFixed(3);
+    const enableExpr = `between(t\\,${charStart}\\,${end.toFixed(3)})`;
+
+    const curIn = i === 0 ? inLabel : `tw_${inLabel}_${i - 1}`;
+    const curOut = i === charCount - 1 ? outLabel : `tw_${inLabel}_${i}`;
+
+    const parts = [
+      `[${curIn}]drawtext=`,
+      `fontfile='${fontPath}'`,
+      `:text='${partialText}'`,
+      `:fontsize=${tc.style.fontSize}`,
+      `:fontcolor=${hexColor}`,
+      `:x=${xExpr}`,
+      `:y=${yExpr}`,
+      `:enable='${enableExpr}'`,
+    ];
+    if (alphaExpr) parts.push(`:alpha='${alphaExpr}'`);
+    parts.push(`[${curOut}]`);
+
+    filters.push(parts.join(''));
+  }
+
+  return filters;
+}
+
 function buildDrawtextFilters(
   textClips: TextClip[],
   inputLabel: string,
@@ -177,31 +326,54 @@ function buildDrawtextFilters(
 ): string[] {
   if (textClips.length === 0) return [];
 
+  // Count total filter labels needed (typewriter clips use N labels)
+  const filterEntries: { tc: TextClip; count: number }[] = textClips.map((tc) => {
+    const isTypewriter = tc.animationIn?.type === 'typewriter' && tc.animationIn.duration > 0;
+    return { tc, count: isTypewriter ? tc.content.length : 1 };
+  });
+
   const filters: string[] = [];
-  for (let i = 0; i < textClips.length; i++) {
-    const tc = textClips[i];
-    const inLabel = i === 0 ? inputLabel : `text_${i - 1}`;
-    const outLabel = i === textClips.length - 1 ? outputLabel : `text_${i}`;
+  let labelIdx = 0;
 
-    const fontPath = resolveFontPath(tc.style.fontFamily, tc.style.bold, tc.style.italic);
-    const escapedText = escapeDrawtext(tc.content);
-    const hexColor = `0x${tc.style.color.replace('#', '')}`;
-    const enableStart = tc.timelineStart.toFixed(3);
-    const enableEnd = (tc.timelineStart + tc.duration).toFixed(3);
+  for (let i = 0; i < filterEntries.length; i++) {
+    const { tc, count } = filterEntries[i];
+    const inLabel = labelIdx === 0 ? inputLabel : `text_${labelIdx - 1}`;
+    const isLast = i === filterEntries.length - 1;
+    const outLabel = isLast ? outputLabel : `text_${labelIdx + count - 1}`;
 
-    const filter = [
-      `[${inLabel}]drawtext=`,
-      `fontfile='${fontPath}'`,
-      `:text='${escapedText}'`,
-      `:fontsize=${tc.style.fontSize}`,
-      `:fontcolor=${hexColor}`,
-      `:x=min(max(0\\,w*${tc.position.x}/100-tw/2)\\,w-tw)`,
-      `:y=min(max(0\\,h*${tc.position.y}/100-th/2)\\,h-th)`,
-      `:enable='between(t\\,${enableStart}\\,${enableEnd})'`,
-      `[${outLabel}]`,
-    ].join('');
+    if (count > 1) {
+      // Typewriter: multiple filters
+      const twFilters = buildTypewriterFilters(tc, inLabel, outLabel);
+      filters.push(...twFilters);
+    } else {
+      // Standard single drawtext filter
+      const fontPath = resolveFontPath(tc.style.fontFamily, tc.style.bold, tc.style.italic);
+      const escapedText = escapeDrawtext(tc.content);
+      const hexColor = `0x${tc.style.color.replace('#', '')}`;
+      const enableStart = tc.timelineStart.toFixed(3);
+      const enableEnd = (tc.timelineStart + tc.duration).toFixed(3);
 
-    filters.push(filter);
+      const xExpr = buildAnimatedX(tc);
+      const yExpr = buildAnimatedY(tc);
+      const alphaExpr = buildAlphaExpression(tc);
+
+      const parts = [
+        `[${inLabel}]drawtext=`,
+        `fontfile='${fontPath}'`,
+        `:text='${escapedText}'`,
+        `:fontsize=${tc.style.fontSize}`,
+        `:fontcolor=${hexColor}`,
+        `:x=${xExpr}`,
+        `:y=${yExpr}`,
+        `:enable='between(t\\,${enableStart}\\,${enableEnd})'`,
+      ];
+      if (alphaExpr) parts.push(`:alpha='${alphaExpr}'`);
+      parts.push(`[${outLabel}]`);
+
+      filters.push(parts.join(''));
+    }
+
+    labelIdx += count;
   }
 
   return filters;
