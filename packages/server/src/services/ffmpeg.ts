@@ -3,8 +3,9 @@ import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
-import type { ProjectConfig, Clip, SourceFile } from '@video-editor/shared';
+import type { ProjectConfig, Clip, SourceFile, TextClip } from '@video-editor/shared';
 import { DATA_DIR } from '@video-editor/shared';
+import { resolveFontPath } from './font-resolver.js';
 
 interface ExportProgress {
   percent: number;
@@ -124,22 +125,86 @@ function buildVolumeExpression(
   }
 }
 
-function findAdjacentVolumes(sorted: ClipInput[], index: number): { prevVol: number; nextVol: number } {
+function findAdjacentVolumes(
+  sorted: ClipInput[],
+  index: number,
+): { prevVol: number; nextVol: number } {
   let prevVol = 0;
   let nextVol = 0;
   if (index > 0) {
     const prev = sorted[index - 1];
-    if (Math.abs(clipTimelineEnd(prev.clip) - sorted[index].clip.timelineStart) < ADJACENT_THRESHOLD) {
+    if (
+      Math.abs(clipTimelineEnd(prev.clip) - sorted[index].clip.timelineStart) < ADJACENT_THRESHOLD
+    ) {
       prevVol = prev.clip.volume ?? 1;
     }
   }
   if (index < sorted.length - 1) {
     const next = sorted[index + 1];
-    if (Math.abs(clipTimelineEnd(sorted[index].clip) - next.clip.timelineStart) < ADJACENT_THRESHOLD) {
+    if (
+      Math.abs(clipTimelineEnd(sorted[index].clip) - next.clip.timelineStart) < ADJACENT_THRESHOLD
+    ) {
       nextVol = next.clip.volume ?? 1;
     }
   }
   return { prevVol, nextVol };
+}
+
+function escapeDrawtext(text: string): string {
+  return text
+    .replace(/\\/g, '\\\\\\\\')
+    .replace(/'/g, "'\\\\\\''")
+    .replace(/:/g, '\\\\:')
+    .replace(/\[/g, '\\\\[')
+    .replace(/\]/g, '\\\\]');
+}
+
+function collectTextClips(config: ProjectConfig): TextClip[] {
+  const result: TextClip[] = [];
+  for (const track of config.timeline.tracks) {
+    if (track.type !== 'text') continue;
+    for (const tc of track.textClips ?? []) {
+      result.push(tc);
+    }
+  }
+  return result.sort((a, b) => a.timelineStart - b.timelineStart);
+}
+
+function buildDrawtextFilters(
+  textClips: TextClip[],
+  inputLabel: string,
+  outputLabel: string,
+): string[] {
+  if (textClips.length === 0) return [];
+
+  const filters: string[] = [];
+  for (let i = 0; i < textClips.length; i++) {
+    const tc = textClips[i];
+    const inLabel = i === 0 ? inputLabel : `text_${i - 1}`;
+    const outLabel = i === textClips.length - 1 ? outputLabel : `text_${i}`;
+
+    const fontPath = resolveFontPath(tc.style.fontFamily, tc.style.bold, tc.style.italic);
+    const escapedText = escapeDrawtext(tc.content);
+    const hexColor = `0x${tc.style.color.replace('#', '')}`;
+    const enableStart = tc.timelineStart.toFixed(3);
+    const enableEnd = (tc.timelineStart + tc.duration).toFixed(3);
+
+    const filter = [
+      `[${inLabel}]drawtext=`,
+      `fontfile='${fontPath}'`,
+      `:text='${escapedText}'`,
+      `:fontsize=${tc.style.fontSize}`,
+      `:fontcolor=${hexColor}`,
+      `:x=min(max(0\\,w*${tc.position.x}/100-tw/2)\\,w-tw)`,
+      `:y=min(max(0\\,h*${tc.position.y}/100-th/2)\\,h-th)`,
+      `:enable='between(t\\,${enableStart}\\,${enableEnd})'`,
+      `[${outLabel}]`,
+    ].join('');
+
+    filters.push(filter);
+  }
+
+  return filters;
 }
 
 export async function startExport(
@@ -178,10 +243,17 @@ export async function startExport(
       }
     }
 
-    const sortedVideo = [...videoTrackClips].sort((a, b) => a.clip.timelineStart - b.clip.timelineStart);
-    const sortedAudio = [...audioTrackClips].sort((a, b) => a.clip.timelineStart - b.clip.timelineStart);
+    const sortedVideo = [...videoTrackClips].sort(
+      (a, b) => a.clip.timelineStart - b.clip.timelineStart,
+    );
+    const sortedAudio = [...audioTrackClips].sort(
+      (a, b) => a.clip.timelineStart - b.clip.timelineStart,
+    );
 
-    if (sortedVideo.length === 0 && sortedAudio.length === 0) {
+    // Collect text clips from text tracks
+    const textClips = collectTextClips(config);
+
+    if (sortedVideo.length === 0 && sortedAudio.length === 0 && textClips.length === 0) {
       const error = 'No clips on timeline';
       exportJobs.set(config.id, { percent: 0, status: 'error', error });
       callbacks?.onError?.(error);
@@ -220,7 +292,7 @@ export async function startExport(
       inputIndex++;
     }
 
-    if (inputIndex === 0) {
+    if (inputIndex === 0 && textClips.length === 0) {
       const error = 'No valid source files found';
       exportJobs.set(config.id, { percent: 0, status: 'error', error });
       callbacks?.onError?.(error);
@@ -296,9 +368,16 @@ export async function startExport(
         cursor = input.clip.timelineStart + clipDuration;
       }
 
+      const concatVideoLabel = textClips.length > 0 ? 'outv_pre_text' : 'outv';
       filterParts.push(
-        `${concatVideoInputs.join('')}concat=n=${concatSegmentCount}:v=1:a=1[outv][video_audio]`,
+        `${concatVideoInputs.join('')}concat=n=${concatSegmentCount}:v=1:a=1[${concatVideoLabel}][video_audio]`,
       );
+
+      // Chain drawtext filters for text overlays
+      if (textClips.length > 0) {
+        const drawtextFilters = buildDrawtextFilters(textClips, 'outv_pre_text', 'outv');
+        filterParts.push(...drawtextFilters);
+      }
     }
 
     // Build audio track mix
@@ -358,17 +437,34 @@ export async function startExport(
       filterParts.push(`[video_audio]acopy[outa]`);
       args.push('-filter_complex', filterParts.join(';'));
       args.push('-map', '[outv]', '-map', '[outa]');
-    } else {
-      // Audio only — generate black video
+    } else if (hasAudioTrack) {
+      // Audio only (possibly with text) — generate black video
       const totalAudioDuration = sortedAudio.reduce((max, input) => {
         const end = input.clip.timelineStart + (input.clip.outPoint - input.clip.inPoint);
         return Math.max(max, end);
       }, 0);
+      const blackLabel = textClips.length > 0 ? 'outv_pre_text' : 'outv';
       filterParts.push(
-        `color=c=black:s=${width}x${height}:r=${fps}:d=${totalAudioDuration},format=yuv420p[outv]`,
+        `color=c=black:s=${width}x${height}:r=${fps}:d=${totalAudioDuration},format=yuv420p[${blackLabel}]`,
       );
+      if (textClips.length > 0) {
+        filterParts.push(...buildDrawtextFilters(textClips, 'outv_pre_text', 'outv'));
+      }
       args.push('-filter_complex', filterParts.join(';'));
       args.push('-map', '[outv]', '-map', '[audio_track]');
+    } else if (textClips.length > 0) {
+      // Text only — generate black video with silent audio
+      const totalTextDuration = textClips.reduce((max, tc) => {
+        return Math.max(max, tc.timelineStart + tc.duration);
+      }, 0);
+      filterParts.push(
+        `color=c=black:s=${width}x${height}:r=${fps}:d=${totalTextDuration},format=yuv420p[outv_pre_text]`,
+      );
+      filterParts.push(...buildDrawtextFilters(textClips, 'outv_pre_text', 'outv'));
+      filterParts.push(`anullsrc=channel_layout=stereo:sample_rate=48000[silence_raw]`);
+      filterParts.push(`[silence_raw]atrim=0:${totalTextDuration}[outa]`);
+      args.push('-filter_complex', filterParts.join(';'));
+      args.push('-map', '[outv]', '-map', '[outa]');
     }
 
     args.push('-c:v', 'libx264', '-preset', 'medium', '-crf', '23');
@@ -383,6 +479,7 @@ export async function startExport(
         const end = i.clip.timelineStart + (i.clip.outPoint - i.clip.inPoint);
         return Math.max(max, end);
       }, 0),
+      textClips.reduce((max, tc) => Math.max(max, tc.timelineStart + tc.duration), 0),
     );
 
     await new Promise<void>((resolve, reject) => {

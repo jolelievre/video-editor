@@ -41,7 +41,9 @@ export function useVideoPreview(
 
   const activeVideoSource = computed<SourceFile | null>(() => findSource(activeVideoClip.value));
   const activeAudioSource = computed<SourceFile | null>(() => findSource(activeAudioClip.value));
-  const activeSource = computed<SourceFile | null>(() => activeVideoSource.value ?? activeAudioSource.value);
+  const activeSource = computed<SourceFile | null>(
+    () => activeVideoSource.value ?? activeAudioSource.value,
+  );
 
   // Whether the active video-track source is an image, video, or null
   const activeSourceType = computed<'video' | 'image' | null>(() => {

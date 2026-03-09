@@ -19,13 +19,8 @@
           @add-to-timeline="store.addClipToTimeline($event)"
           @remove-source="onSourceRemoved"
         />
-        <ClipInspector
-          :clip="selectedClip"
-          :source="selectedSource"
-          @update="onClipUpdate"
-        />
       </div>
-      <div class="right-panel">
+      <div class="center-panel">
         <VideoPreview
           :project-id="store.config.id"
           :stream-url="preview.streamUrl.value"
@@ -42,19 +37,43 @@
           :clip-fade-in="preview.activeVideoClip.value?.fadeIn ?? 0"
           :clip-fade-out="preview.activeVideoClip.value?.fadeOut ?? 0"
           :clip-timeline-start="preview.activeVideoClip.value?.timelineStart ?? 0"
-          :clip-duration="(preview.activeVideoClip.value?.outPoint ?? 0) - (preview.activeVideoClip.value?.inPoint ?? 0)"
+          :clip-duration="
+            (preview.activeVideoClip.value?.outPoint ?? 0) -
+            (preview.activeVideoClip.value?.inPoint ?? 0)
+          "
           :clip-prev-volume="videoAdjacentVols.prev"
           :clip-next-volume="videoAdjacentVols.next"
           :audio-clip-volume="preview.activeAudioClip.value?.volume ?? 1"
           :audio-clip-fade-in="preview.activeAudioClip.value?.fadeIn ?? 0"
           :audio-clip-fade-out="preview.activeAudioClip.value?.fadeOut ?? 0"
           :audio-clip-timeline-start="preview.activeAudioClip.value?.timelineStart ?? 0"
-          :audio-clip-duration="(preview.activeAudioClip.value?.outPoint ?? 0) - (preview.activeAudioClip.value?.inPoint ?? 0)"
+          :audio-clip-duration="
+            (preview.activeAudioClip.value?.outPoint ?? 0) -
+            (preview.activeAudioClip.value?.inPoint ?? 0)
+          "
           :audio-clip-prev-volume="audioAdjacentVols.prev"
           :audio-clip-next-volume="audioAdjacentVols.next"
           :image-url="imagePreviewUrl"
           :seek-generation="preview.seekGeneration.value"
+          :active-text-clips="activeTextClips"
+          :selected-clip-id="store.selectedClipId"
+          :resolution="store.config.resolution"
           @toggle-play="togglePlay"
+          @update-text-position="onTextPositionUpdate"
+          @select-text-clip="store.selectClip($event)"
+        />
+      </div>
+      <div class="inspector-panel">
+        <TextClipInspector
+          v-if="selectedTextClip"
+          :text-clip="selectedTextClip"
+          @update="onTextClipUpdate"
+        />
+        <ClipInspector
+          v-else
+          :clip="selectedClip"
+          :source="selectedSource"
+          @update="onClipUpdate"
         />
       </div>
     </div>
@@ -77,13 +96,14 @@ import { useRoute } from 'vue-router';
 import { useProjectStore } from '../stores/project';
 import { useTimeline } from '../composables/useTimeline';
 import { useVideoPreview } from '../composables/useVideoPreview';
-import type { SourceFile, Clip } from '@video-editor/shared';
+import type { SourceFile, Clip, TextClip } from '@video-editor/shared';
 import { getStreamUrl } from '../api/client';
 import FileUploader from './FileUploader.vue';
 import VideoPreview from './VideoPreview.vue';
 import Timeline from './Timeline.vue';
 import ExportButton from './ExportButton.vue';
 import ClipInspector from './ClipInspector.vue';
+import TextClipInspector from './TextClipInspector.vue';
 
 const route = useRoute();
 const store = useProjectStore();
@@ -105,9 +125,33 @@ const selectedClip = computed<Clip | null>(() => {
   return null;
 });
 
+const selectedTextClip = computed<TextClip | null>(() => {
+  if (!store.config || !store.selectedClipId) return null;
+  for (const track of store.config.timeline.tracks) {
+    const tc = (track.textClips ?? []).find((c) => c.id === store.selectedClipId);
+    if (tc) return tc;
+  }
+  return null;
+});
+
 const selectedSource = computed<SourceFile | null>(() => {
   if (!store.config || !selectedClip.value) return null;
   return store.config.sources.find((s) => s.id === selectedClip.value!.sourceId) ?? null;
+});
+
+const activeTextClips = computed<TextClip[]>(() => {
+  if (!store.config) return [];
+  const playhead = tl.playheadPosition.value;
+  const result: TextClip[] = [];
+  for (const track of store.config.timeline.tracks) {
+    if (track.type !== 'text') continue;
+    for (const tc of track.textClips ?? []) {
+      if (playhead >= tc.timelineStart && playhead < tc.timelineStart + tc.duration) {
+        result.push(tc);
+      }
+    }
+  }
+  return result;
 });
 
 const ADJACENT_THRESHOLD = 0.05;
@@ -116,7 +160,10 @@ function clipEnd(c: Clip): number {
   return c.timelineStart + (c.outPoint - c.inPoint);
 }
 
-function getAdjacentVolumes(clip: Clip | null, trackType: 'video' | 'audio'): { prev: number; next: number } {
+function getAdjacentVolumes(
+  clip: Clip | null,
+  trackType: 'video' | 'audio',
+): { prev: number; next: number } {
   if (!clip || !store.config) return { prev: 0, next: 0 };
   const track = store.config.timeline.tracks.find((t) => (t.type ?? 'video') === trackType);
   if (!track) return { prev: 0, next: 0 };
@@ -139,8 +186,12 @@ function getAdjacentVolumes(clip: Clip | null, trackType: 'video' | 'audio'): { 
   return { prev, next };
 }
 
-const videoAdjacentVols = computed(() => getAdjacentVolumes(preview.activeVideoClip.value, 'video'));
-const audioAdjacentVols = computed(() => getAdjacentVolumes(preview.activeAudioClip.value, 'audio'));
+const videoAdjacentVols = computed(() =>
+  getAdjacentVolumes(preview.activeVideoClip.value, 'video'),
+);
+const audioAdjacentVols = computed(() =>
+  getAdjacentVolumes(preview.activeAudioClip.value, 'audio'),
+);
 
 const imagePreviewUrl = computed<string | null>(() => {
   if (preview.activeSourceType.value !== 'image') return null;
@@ -163,12 +214,21 @@ function onClipUpdate(changes: Partial<Clip>) {
   }
 }
 
+function onTextClipUpdate(changes: Partial<TextClip>) {
+  if (store.selectedClipId) {
+    store.updateTextClip(store.selectedClipId, changes);
+  }
+}
+
+function onTextPositionUpdate(payload: { clipId: string; x: number; y: number }) {
+  store.updateTextClip(payload.clipId, { position: { x: payload.x, y: payload.y } });
+}
+
 function cutAtPlayhead() {
   store.splitClipAtPlayhead(tl.playheadPosition.value);
 }
 
 function onKeyDown(e: KeyboardEvent) {
-  // Ignore when typing in inputs
   const tag = (e.target as HTMLElement).tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
@@ -210,7 +270,6 @@ function onSourceUploaded(source: SourceFile) {
 }
 
 function onSourceRemoved() {
-  // Reload config from server (which already removed source, file, and related clips)
   store.load(route.params.id as string);
 }
 </script>
@@ -266,12 +325,20 @@ function onSourceRemoved() {
   flex-direction: column;
 }
 
-.right-panel {
+.center-panel {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   background: #0a0a1a;
+}
+
+.inspector-panel {
+  width: 240px;
+  border-left: 1px solid #4a4e69;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .loading {

@@ -29,7 +29,10 @@ interface ProbeResult {
   fps: number;
 }
 
-export function probeFile(filePath: string, mediaType: 'video' | 'image' | 'audio'): Promise<ProbeResult> {
+export function probeFile(
+  filePath: string,
+  mediaType: 'video' | 'image' | 'audio',
+): Promise<ProbeResult> {
   return new Promise((resolve, reject) => {
     ffmpeg.ffprobe(filePath, (err, metadata) => {
       if (err) return reject(err);

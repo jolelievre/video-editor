@@ -15,6 +15,10 @@ export function useTimeline(config: () => ProjectConfig | null) {
         const end = clip.timelineStart + (clip.outPoint - clip.inPoint);
         if (end > max) max = end;
       }
+      for (const tc of track.textClips ?? []) {
+        const end = tc.timelineStart + tc.duration;
+        if (end > max) max = end;
+      }
     }
     return max;
   });

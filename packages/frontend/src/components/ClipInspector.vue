@@ -115,7 +115,6 @@ function formatTime(seconds: number): string {
 <style scoped>
 .clip-inspector {
   padding: 12px;
-  border-top: 1px solid #333;
 }
 
 h3 {
@@ -165,7 +164,7 @@ h3 {
   gap: 8px;
 }
 
-.slider-row input[type="range"] {
+.slider-row input[type='range'] {
   flex: 1;
   height: 4px;
   -webkit-appearance: none;
@@ -175,7 +174,7 @@ h3 {
   outline: none;
 }
 
-.slider-row input[type="range"]::-webkit-slider-thumb {
+.slider-row input[type='range']::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 12px;
   height: 12px;
@@ -184,7 +183,7 @@ h3 {
   cursor: pointer;
 }
 
-.slider-row input[type="range"]::-moz-range-thumb {
+.slider-row input[type='range']::-moz-range-thumb {
   width: 12px;
   height: 12px;
   border-radius: 50%;
