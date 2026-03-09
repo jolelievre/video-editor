@@ -14,15 +14,17 @@ export interface SourceFile {
   id: string;
   filename: string;
   path: string;
-  duration: number;
-  width: number;
-  height: number;
-  fps: number;
+  type: 'video' | 'image' | 'audio';
+  duration: number;    // 0 for images
+  width: number;       // 0 for audio
+  height: number;      // 0 for audio
+  fps: number;         // 0 for images/audio
 }
 
 export interface Track {
   id: string;
   name: string;
+  type: 'video' | 'audio';
   clips: Clip[];
 }
 
@@ -32,4 +34,7 @@ export interface Clip {
   inPoint: number;
   outPoint: number;
   timelineStart: number;
+  volume: number;       // 0.0-2.0, default 1.0
+  fadeIn: number;        // seconds, default 0
+  fadeOut: number;       // seconds, default 0
 }

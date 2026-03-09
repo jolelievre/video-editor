@@ -1,6 +1,6 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, extname } from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 import { getProject, saveProject } from '../services/project-store.js';
 import { saveUpload, deleteFile } from '../services/file-manager.js';
@@ -8,6 +8,33 @@ import { generateThumbnails } from '../services/ffmpeg.js';
 import { DATA_DIR } from '@video-editor/shared';
 
 const THUMBNAIL_COUNT = 6;
+
+const CONTENT_TYPE_MAP: Record<string, string> = {
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mov': 'video/quicktime',
+  '.avi': 'video/x-msvideo',
+  '.mkv': 'video/x-matroska',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.aac': 'audio/aac',
+  '.ogg': 'audio/ogg',
+  '.flac': 'audio/flac',
+  '.m4a': 'audio/mp4',
+  '.wma': 'audio/x-ms-wma',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.bmp': 'image/bmp',
+  '.tiff': 'image/tiff',
+};
+
+function getContentType(filename: string): string {
+  const ext = extname(filename).toLowerCase();
+  return CONTENT_TYPE_MAP[ext] ?? 'application/octet-stream';
+}
 
 export const fileRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Params: { id: string } }>('/:id/sources', async (request, reply) => {
@@ -62,9 +89,14 @@ export const fileRoutes: FastifyPluginAsync = async (app) => {
           if (!source) {
             return reply.status(404).send({ error: 'Source not found' });
           }
+          // No thumbnails for audio sources
+          if (source.type === 'audio') {
+            return reply.status(404).send({ error: 'No thumbnails for audio' });
+          }
           const filePath = join(DATA_DIR, request.params.id, source.path);
+          const thumbCount = source.type === 'image' ? 1 : THUMBNAIL_COUNT;
           await mkdir(thumbDir, { recursive: true });
-          await generateThumbnails(filePath, thumbDir, THUMBNAIL_COUNT, source.duration);
+          await generateThumbnails(filePath, thumbDir, thumbCount, source.duration);
         } catch {
           return reply.status(404).send({ error: 'Thumbnail generation failed' });
         }
@@ -98,6 +130,7 @@ export const fileRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const stat = statSync(filePath);
+      const contentType = getContentType(source.filename);
       const range = request.headers.range;
 
       if (range) {
@@ -112,7 +145,7 @@ export const fileRoutes: FastifyPluginAsync = async (app) => {
             'Content-Range': `bytes ${start}-${end}/${stat.size}`,
             'Accept-Ranges': 'bytes',
             'Content-Length': chunkSize,
-            'Content-Type': 'video/mp4',
+            'Content-Type': contentType,
           })
           .send(createReadStream(filePath, { start, end }));
       }
@@ -120,7 +153,7 @@ export const fileRoutes: FastifyPluginAsync = async (app) => {
       return reply
         .headers({
           'Content-Length': stat.size,
-          'Content-Type': 'video/mp4',
+          'Content-Type': contentType,
           'Accept-Ranges': 'bytes',
         })
         .send(createReadStream(filePath));
