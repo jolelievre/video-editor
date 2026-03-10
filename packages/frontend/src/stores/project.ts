@@ -24,12 +24,13 @@ export const useProjectStore = defineStore('project', () => {
   const undoStack = ref<string[]>([]);
   const redoStack = ref<string[]>([]);
   let inUndoGroup = false;
+  let inUndoRedo = false;
 
   const canUndo = computed(() => undoStack.value.length > 0);
   const canRedo = computed(() => redoStack.value.length > 0);
 
   function pushSnapshot() {
-    if (inUndoGroup) return;
+    if (inUndoGroup || inUndoRedo) return;
     if (!config.value) return;
     const snapshot = JSON.stringify(config.value.timeline);
     if (undoStack.value.length > 0 && undoStack.value[undoStack.value.length - 1] === snapshot) {
@@ -39,6 +40,7 @@ export const useProjectStore = defineStore('project', () => {
     if (undoStack.value.length > HISTORY_LIMIT) {
       undoStack.value.shift();
     }
+    // New action after undos: discard any remaining redo entries
     redoStack.value = [];
   }
 
@@ -53,20 +55,24 @@ export const useProjectStore = defineStore('project', () => {
 
   function undo() {
     if (!config.value || undoStack.value.length === 0) return;
+    inUndoRedo = true;
     const current = JSON.stringify(config.value.timeline);
     redoStack.value.push(current);
     const snapshot = undoStack.value.pop()!;
     config.value.timeline = JSON.parse(snapshot);
     debouncedSave();
+    inUndoRedo = false;
   }
 
   function redo() {
     if (!config.value || redoStack.value.length === 0) return;
+    inUndoRedo = true;
     const current = JSON.stringify(config.value.timeline);
     undoStack.value.push(current);
     const snapshot = redoStack.value.pop()!;
     config.value.timeline = JSON.parse(snapshot);
     debouncedSave();
+    inUndoRedo = false;
   }
 
   async function load(id: string) {
