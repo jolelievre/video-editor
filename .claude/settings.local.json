@@ -25,7 +25,8 @@
       "Bash(done)",
       "Bash(do echo:*)",
       "Bash(python3:*)",
-      "Bash(grep -r \"color\\\\|background\\\\|#[0-9a-fA-F]\" /Users/jonathanlelievre/www/video-editor/packages/frontend/src/components/*.vue | grep -E \"\\(selected|active|audio|video|text|image\\)\" | head -30)"
+      "Bash(grep -r \"color\\\\|background\\\\|#[0-9a-fA-F]\" /Users/jonathanlelievre/www/video-editor/packages/frontend/src/components/*.vue | grep -E \"\\(selected|active|audio|video|text|image\\)\" | head -30)",
+      "Bash(find /Users/jonathanlelievre/www/video-editor -type f \\\\\\( -name \"*api*\" -o -name \"*client*\" \\\\\\) | grep -E \"\\\\.\\(ts|js\\)$\")"
     ]
   }
 }

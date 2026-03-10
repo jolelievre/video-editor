@@ -16,6 +16,7 @@
         <FileUploader
           :project-id="store.config.id"
           :sources="store.config.sources"
+          :config="store.config"
           @uploaded="onSourceUploaded"
           @add-to-timeline="store.addClipToTimeline($event)"
           @remove-source="onSourceRemoved"

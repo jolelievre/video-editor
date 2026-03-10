@@ -9,10 +9,24 @@
     <ul v-else>
       <li v-for="project in projects" :key="project.id" @click="openProject(project.id)">
         <span class="name">{{ project.name }}</span>
-        <span class="date">{{ new Date(project.updatedAt).toLocaleDateString() }}</span>
+        <div class="li-right">
+          <span class="date">{{ new Date(project.updatedAt).toLocaleDateString() }}</span>
+          <button class="delete-btn" title="Delete project" @click.stop="confirmDelete(project)">
+            &times;
+          </button>
+        </div>
       </li>
       <li v-if="projects.length === 0" class="empty">No projects yet. Create one above.</li>
     </ul>
+    <ConfirmModal
+      v-if="projectToDelete"
+      title="Delete project"
+      :message="`Are you sure you want to delete '${projectToDelete.name}'?`"
+      warning="This will permanently remove the project and all its media files. This action cannot be undone."
+      confirm-label="Delete"
+      @confirm="executeDelete"
+      @cancel="projectToDelete = null"
+    />
   </div>
 </template>
 
@@ -20,11 +34,13 @@
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import * as api from '../api/client';
+import ConfirmModal from './ConfirmModal.vue';
 
 const router = useRouter();
 const projects = ref<Array<{ id: string; name: string; updatedAt: string }>>([]);
 const newName = ref('');
 const loading = ref(true);
+const projectToDelete = ref<{ id: string; name: string } | null>(null);
 
 onMounted(async () => {
   projects.value = await api.listProjects();
@@ -40,6 +56,18 @@ async function create() {
 
 function openProject(id: string) {
   router.push({ name: 'editor', params: { id } });
+}
+
+function confirmDelete(project: { id: string; name: string }) {
+  projectToDelete.value = project;
+}
+
+async function executeDelete() {
+  if (!projectToDelete.value) return;
+  const id = projectToDelete.value.id;
+  await api.deleteProject(id);
+  projects.value = projects.value.filter((p) => p.id !== id);
+  projectToDelete.value = null;
 }
 </script>
 
@@ -95,8 +123,37 @@ li.empty:hover {
   background: #16213e;
 }
 
+.li-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .date {
   font-size: 12px;
   color: #888;
+}
+
+.delete-btn {
+  background: transparent;
+  border: none;
+  color: #ff6b6b;
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+li:hover .delete-btn {
+  opacity: 1;
+}
+
+.delete-btn:hover {
+  background: #ff4444;
+  color: white;
 }
 </style>
