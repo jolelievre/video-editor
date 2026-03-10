@@ -233,12 +233,13 @@ function onKeyDown(e: KeyboardEvent) {
   const tag = (e.target as HTMLElement).tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
-  if (e.key === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+  const key = e.key.toLowerCase();
+  if (key === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
     e.preventDefault();
     store.undo();
     return;
   }
-  if (e.key === 'z' && (e.ctrlKey || e.metaKey) && e.shiftKey) {
+  if (key === 'z' && (e.ctrlKey || e.metaKey) && e.shiftKey) {
     e.preventDefault();
     store.redo();
     return;
