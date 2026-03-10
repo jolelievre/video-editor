@@ -18,7 +18,14 @@
       "Bash(GH_TOKEN=$CLAUDE_GH_TOKEN gh pr:*)",
       "Bash(do if:*)",
       "Bash(bash:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(for dir in 2000s 2007-2009 2010 2011 2014 2016 2017 2019 2020 2023 2024 2025)",
+      "Bash(do echo \"=== $dir ===\")",
+      "Read(//Users/jonathanlelievre/Documents/Mika-40-ans/sorted-medias/**)",
+      "Bash(done)",
+      "Bash(do echo:*)",
+      "Bash(python3:*)",
+      "Bash(grep -r \"color\\\\|background\\\\|#[0-9a-fA-F]\" /Users/jonathanlelievre/www/video-editor/packages/frontend/src/components/*.vue | grep -E \"\\(selected|active|audio|video|text|image\\)\" | head -30)"
     ]
   }
 }

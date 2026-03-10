@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { v4 as uuidv4 } from 'uuid';
 import type { ProjectConfig, Clip, TextClip } from '@video-editor/shared';
 import * as api from '../api/client';
@@ -9,6 +9,7 @@ export const REORDER_THRESHOLD_PX = 80;
 
 const IMAGE_DEFAULT_DURATION = 5;
 const TEXT_DEFAULT_DURATION = 5;
+const HISTORY_LIMIT = 50;
 
 export const useProjectStore = defineStore('project', () => {
   const config = ref<ProjectConfig | null>(null);
@@ -18,6 +19,55 @@ export const useProjectStore = defineStore('project', () => {
   const selectedTrackId = ref<string | null>(null);
 
   let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  // --- Undo/Redo ---
+  const undoStack = ref<string[]>([]);
+  const redoStack = ref<string[]>([]);
+  let inUndoGroup = false;
+
+  const canUndo = computed(() => undoStack.value.length > 0);
+  const canRedo = computed(() => redoStack.value.length > 0);
+
+  function pushSnapshot() {
+    if (inUndoGroup) return;
+    if (!config.value) return;
+    const snapshot = JSON.stringify(config.value.timeline);
+    if (undoStack.value.length > 0 && undoStack.value[undoStack.value.length - 1] === snapshot) {
+      return;
+    }
+    undoStack.value.push(snapshot);
+    if (undoStack.value.length > HISTORY_LIMIT) {
+      undoStack.value.shift();
+    }
+    redoStack.value = [];
+  }
+
+  function beginUndoGroup() {
+    pushSnapshot();
+    inUndoGroup = true;
+  }
+
+  function endUndoGroup() {
+    inUndoGroup = false;
+  }
+
+  function undo() {
+    if (!config.value || undoStack.value.length === 0) return;
+    const current = JSON.stringify(config.value.timeline);
+    redoStack.value.push(current);
+    const snapshot = undoStack.value.pop()!;
+    config.value.timeline = JSON.parse(snapshot);
+    debouncedSave();
+  }
+
+  function redo() {
+    if (!config.value || redoStack.value.length === 0) return;
+    const current = JSON.stringify(config.value.timeline);
+    undoStack.value.push(current);
+    const snapshot = redoStack.value.pop()!;
+    config.value.timeline = JSON.parse(snapshot);
+    debouncedSave();
+  }
 
   async function load(id: string) {
     loading.value = true;
@@ -65,6 +115,7 @@ export const useProjectStore = defineStore('project', () => {
   }
 
   function addClipToTimeline(sourceId: string) {
+    pushSnapshot();
     if (!config.value) return;
     const source = config.value.sources.find((s) => s.id === sourceId);
     if (!source) return;
@@ -97,6 +148,7 @@ export const useProjectStore = defineStore('project', () => {
   }
 
   function removeClip(clipId: string) {
+    pushSnapshot();
     if (!config.value) return;
     for (const track of config.value.timeline.tracks) {
       const idx = track.clips.findIndex((c) => c.id === clipId);
@@ -112,6 +164,7 @@ export const useProjectStore = defineStore('project', () => {
   }
 
   function updateClip(clipId: string, changes: Partial<Clip>) {
+    pushSnapshot();
     if (!config.value) return;
     for (const track of config.value.timeline.tracks) {
       const clip = track.clips.find((c) => c.id === clipId);
@@ -148,6 +201,7 @@ export const useProjectStore = defineStore('project', () => {
   }
 
   function moveClip(clipId: string, desiredStart: number, zoom: number) {
+    pushSnapshot();
     if (!config.value) return;
     for (const track of config.value.timeline.tracks) {
       const clip = track.clips.find((c) => c.id === clipId);
@@ -198,6 +252,7 @@ export const useProjectStore = defineStore('project', () => {
   }
 
   function splitClipAtPlayhead(playheadTime: number): boolean {
+    pushSnapshot();
     if (!config.value) return false;
 
     // Only cut on the selected track, fall back to first match
@@ -269,6 +324,7 @@ export const useProjectStore = defineStore('project', () => {
   // --- Text track/clip actions ---
 
   function addTextTrack() {
+    pushSnapshot();
     if (!config.value) return;
     const textTracks = config.value.timeline.tracks.filter((t) => t.type === 'text');
     const name = `Text ${textTracks.length + 1}`;
@@ -286,6 +342,7 @@ export const useProjectStore = defineStore('project', () => {
   }
 
   function removeTrack(trackId: string) {
+    pushSnapshot();
     if (!config.value) return;
     const idx = config.value.timeline.tracks.findIndex((t) => t.id === trackId);
     if (idx === -1) return;
@@ -300,6 +357,7 @@ export const useProjectStore = defineStore('project', () => {
   }
 
   function addTextClip(trackId: string, playheadTime?: number) {
+    pushSnapshot();
     if (!config.value) return;
     const track = config.value.timeline.tracks.find((t) => t.id === trackId);
     if (!track || track.type !== 'text') return;
@@ -350,6 +408,7 @@ export const useProjectStore = defineStore('project', () => {
   }
 
   function updateTextClip(clipId: string, changes: Partial<TextClip>) {
+    pushSnapshot();
     if (!config.value) return;
     for (const track of config.value.timeline.tracks) {
       const tc = (track.textClips ?? []).find((c) => c.id === clipId);
@@ -385,6 +444,7 @@ export const useProjectStore = defineStore('project', () => {
   }
 
   function removeTextClip(clipId: string) {
+    pushSnapshot();
     if (!config.value) return;
     for (const track of config.value.timeline.tracks) {
       const idx = (track.textClips ?? []).findIndex((c) => c.id === clipId);
@@ -400,6 +460,7 @@ export const useProjectStore = defineStore('project', () => {
   }
 
   function moveTextClip(clipId: string, desiredStart: number) {
+    pushSnapshot();
     if (!config.value) return;
     for (const track of config.value.timeline.tracks) {
       const tc = (track.textClips ?? []).find((c) => c.id === clipId);
@@ -432,21 +493,56 @@ export const useProjectStore = defineStore('project', () => {
     }
   }
 
+  function moveClipGroup(clipIds: string[], delta: number) {
+    pushSnapshot();
+    if (!config.value) return;
+    for (const track of config.value.timeline.tracks) {
+      const groupClips = track.clips.filter((c) => clipIds.includes(c.id));
+      if (groupClips.length === 0) continue;
+
+      // Apply delta to all group clips
+      for (const clip of groupClips) {
+        clip.timelineStart = Math.round(Math.max(0, clip.timelineStart + delta) * 100) / 100;
+      }
+
+      // Re-sort and resolve overlaps with non-group clips
+      track.clips.sort((a, b) => a.timelineStart - b.timelineStart);
+      for (let i = 0; i < track.clips.length - 1; i++) {
+        const current = track.clips[i];
+        const currentEnd = getClipEnd(current);
+        const nextClip = track.clips[i + 1];
+        if (nextClip.timelineStart < currentEnd) {
+          nextClip.timelineStart = Math.round(currentEnd * 100) / 100;
+        }
+      }
+    }
+    debouncedSave();
+  }
+
   return {
     config,
     loading,
     saving,
     selectedClipId,
     selectedTrackId,
+    canUndo,
+    canRedo,
     load,
     save,
     debouncedSave,
+    pushSnapshot,
+    beginUndoGroup,
+    endUndoGroup,
+    undo,
+    redo,
     addClipToTimeline,
     removeClip,
     updateClip,
     selectClip,
     selectTrack,
     moveClip,
+    moveClipGroup,
+    getClipEnd,
     splitClipAtPlayhead,
     addTextTrack,
     removeTrack,

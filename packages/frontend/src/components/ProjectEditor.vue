@@ -73,6 +73,7 @@
           v-else
           :clip="selectedClip"
           :source="selectedSource"
+          :project-id="store.config.id"
           @update="onClipUpdate"
         />
       </div>
@@ -231,6 +232,17 @@ function cutAtPlayhead() {
 function onKeyDown(e: KeyboardEvent) {
   const tag = (e.target as HTMLElement).tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+  if (e.key === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+    e.preventDefault();
+    store.undo();
+    return;
+  }
+  if (e.key === 'z' && (e.ctrlKey || e.metaKey) && e.shiftKey) {
+    e.preventDefault();
+    store.redo();
+    return;
+  }
 
   if (e.key === 'c' && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault();
