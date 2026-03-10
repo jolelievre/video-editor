@@ -364,7 +364,7 @@ function loadAndSeekAudio(url: string, seekTime: number, shouldPlay: boolean) {
   );
 }
 
-// Watch video clip changes
+// Watch video clip changes (flush: 'post' so the <video> element exists after v-if renders)
 watch(
   () => props.activeClipId,
   (clipId) => {
@@ -375,6 +375,7 @@ watch(
     }
     loadAndSeekVideo(props.streamUrl, props.sourceTime, props.isPlaying);
   },
+  { flush: 'post' },
 );
 
 // Watch audio clip changes
@@ -413,6 +414,7 @@ watch(
       if (video && !video.paused) video.pause();
     }
   },
+  { flush: 'post' },
 );
 
 watch(
@@ -502,6 +504,7 @@ watch(
       if (audio) audio.pause();
     }
   },
+  { flush: 'post' },
 );
 
 function formatTime(seconds: number): string {
