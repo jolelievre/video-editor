@@ -1,7 +1,11 @@
 <template>
-  <div class="clip-inspector">
+  <div class="clip-inspector" :class="{ 'has-selection': !!clip }" :style="accentStyle">
     <h3>Clip Properties</h3>
     <div v-if="clip && source" class="inspector-content">
+      <div class="thumbnail-container">
+        <img v-if="thumbnailUrl" :src="thumbnailUrl" class="thumbnail" />
+        <div v-else class="thumbnail-placeholder">&#9835;</div>
+      </div>
       <div class="field">
         <label>Source</label>
         <span class="value filename">{{ source.filename }}</span>
@@ -30,6 +34,8 @@
             max="150"
             step="1"
             :value="Math.round((clip.volume ?? 1) * 100)"
+            @mousedown="onSliderStart"
+            @mouseup="onSliderEnd"
             @input="onVolumeChange"
           />
           <span class="slider-value">{{ Math.round((clip.volume ?? 1) * 100) }}%</span>
@@ -45,6 +51,8 @@
             :max="maxFade"
             step="0.1"
             :value="clip.fadeIn ?? 0"
+            @mousedown="onSliderStart"
+            @mouseup="onSliderEnd"
             @input="onFadeInChange"
           />
           <span class="slider-value">{{ (clip.fadeIn ?? 0).toFixed(1) }}s</span>
@@ -60,6 +68,8 @@
             :max="maxFade"
             step="0.1"
             :value="clip.fadeOut ?? 0"
+            @mousedown="onSliderStart"
+            @mouseup="onSliderEnd"
             @input="onFadeOutChange"
           />
           <span class="slider-value">{{ (clip.fadeOut ?? 0).toFixed(1) }}s</span>
@@ -75,19 +85,56 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { Clip, SourceFile } from '@video-editor/shared';
+import { getThumbnailUrl, getStreamUrl } from '../api/client';
+import { useProjectStore } from '../stores/project';
+
+const ACCENT_COLORS: Record<string, string> = {
+  video: '#1a8a9a',
+  image: '#2d6a4f',
+  audio: '#7c6bbf',
+};
 
 const props = defineProps<{
   clip: Clip | null;
   source: SourceFile | null;
+  projectId: string;
 }>();
 
 const emit = defineEmits<{
   update: [changes: Partial<Clip>];
 }>();
 
+const store = useProjectStore();
+
+function onSliderStart() {
+  store.beginUndoGroup();
+}
+
+function onSliderEnd() {
+  store.endUndoGroup();
+}
+
 const maxFade = computed(() => {
   if (!props.clip) return 10;
   return Math.max(0.1, props.clip.outPoint - props.clip.inPoint);
+});
+
+const sourceType = computed(() => props.source?.type ?? 'video');
+
+const accentColor = computed(() => ACCENT_COLORS[sourceType.value] ?? ACCENT_COLORS.video);
+
+const accentStyle = computed(() => ({ '--accent': accentColor.value }));
+
+const thumbnailUrl = computed<string | null>(() => {
+  if (!props.clip || !props.source) return null;
+  const type = sourceType.value;
+  if (type === 'video') {
+    return getThumbnailUrl(props.projectId, props.source.id, 3);
+  }
+  if (type === 'image') {
+    return getStreamUrl(props.projectId, props.source.id);
+  }
+  return null;
 });
 
 function onVolumeChange(e: Event) {
@@ -115,12 +162,40 @@ function formatTime(seconds: number): string {
 <style scoped>
 .clip-inspector {
   padding: 12px;
+  border: 2px solid transparent;
+  border-radius: 4px;
+}
+
+.clip-inspector.has-selection {
+  border-color: var(--accent, #6c63ff);
 }
 
 h3 {
   font-size: 13px;
-  color: #6c63ff;
+  color: var(--accent, #6c63ff);
   margin-bottom: 12px;
+}
+
+.thumbnail-container {
+  aspect-ratio: 16 / 9;
+  background: #111;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.thumbnail {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.thumbnail-placeholder {
+  font-size: 32px;
+  color: #555;
 }
 
 .inspector-content {
@@ -179,7 +254,7 @@ h3 {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #6c63ff;
+  background: var(--accent, #6c63ff);
   cursor: pointer;
 }
 
@@ -187,7 +262,7 @@ h3 {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #6c63ff;
+  background: var(--accent, #6c63ff);
   border: none;
   cursor: pointer;
 }

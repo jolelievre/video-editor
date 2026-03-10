@@ -77,6 +77,14 @@
             </button>
           </div>
           <div class="track-clips">
+            <!-- Group handles for contiguous media clips -->
+            <div
+              v-for="group in contiguousGroups.filter((g) => g.trackId === track.id)"
+              :key="'group-' + group.clipIds[0]"
+              class="group-handle"
+              :style="{ left: group.startPx + 'px', width: group.widthPx + 'px' }"
+              @mousedown.stop="startGroupDrag(group, $event)"
+            />
             <!-- Media clips (video/audio tracks) -->
             <TimelineClip
               v-for="clip in track.clips"
@@ -139,6 +147,116 @@ const emit = defineEmits<{
 const store = useProjectStore();
 const scrollContainer = ref<HTMLElement | null>(null);
 
+interface ClipGroup {
+  trackId: string;
+  clipIds: string[];
+  startPx: number;
+  widthPx: number;
+  startTime: number;
+}
+
+const ADJACENT_THRESHOLD = 0.05;
+
+const contiguousGroups = computed<ClipGroup[]>(() => {
+  const groups: ClipGroup[] = [];
+  for (const track of props.config.timeline.tracks) {
+    const trackType = track.type ?? 'video';
+    if (trackType !== 'video' && trackType !== 'audio') continue;
+    if (track.clips.length < 2) continue;
+
+    const sorted = [...track.clips].sort((a, b) => a.timelineStart - b.timelineStart);
+    let currentGroup: typeof sorted = [sorted[0]];
+
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = currentGroup[currentGroup.length - 1];
+      const prevEnd = prev.timelineStart + (prev.outPoint - prev.inPoint);
+      if (sorted[i].timelineStart - prevEnd < ADJACENT_THRESHOLD) {
+        currentGroup.push(sorted[i]);
+      } else {
+        if (currentGroup.length >= 2) {
+          const first = currentGroup[0];
+          const last = currentGroup[currentGroup.length - 1];
+          const lastEnd = last.timelineStart + (last.outPoint - last.inPoint);
+          groups.push({
+            trackId: track.id,
+            clipIds: currentGroup.map((c) => c.id),
+            startPx: first.timelineStart * props.tl.zoomLevel.value,
+            widthPx: (lastEnd - first.timelineStart) * props.tl.zoomLevel.value,
+            startTime: first.timelineStart,
+          });
+        }
+        currentGroup = [sorted[i]];
+      }
+    }
+    if (currentGroup.length >= 2) {
+      const first = currentGroup[0];
+      const last = currentGroup[currentGroup.length - 1];
+      const lastEnd = last.timelineStart + (last.outPoint - last.inPoint);
+      groups.push({
+        trackId: track.id,
+        clipIds: currentGroup.map((c) => c.id),
+        startPx: first.timelineStart * props.tl.zoomLevel.value,
+        widthPx: (lastEnd - first.timelineStart) * props.tl.zoomLevel.value,
+        startTime: first.timelineStart,
+      });
+    }
+  }
+  return groups;
+});
+
+function startGroupDrag(group: ClipGroup, e: MouseEvent) {
+  e.preventDefault();
+  store.beginUndoGroup();
+  const startX = e.clientX;
+  // Capture original positions at drag start
+  const originalPositions = new Map<string, number>();
+  for (const track of props.config.timeline.tracks) {
+    for (const clip of track.clips) {
+      if (group.clipIds.includes(clip.id)) {
+        originalPositions.set(clip.id, clip.timelineStart);
+      }
+    }
+  }
+  const groupStartTime = group.startTime;
+
+  function onMove(ev: MouseEvent) {
+    const dx = ev.clientX - startX;
+    const desiredDelta = dx / props.tl.zoomLevel.value;
+    // Clamp so group doesn't go before 0
+    const clampedDelta = Math.max(-groupStartTime, desiredDelta);
+
+    // Restore original positions then apply delta
+    for (const track of props.config.timeline.tracks) {
+      for (const clip of track.clips) {
+        const orig = originalPositions.get(clip.id);
+        if (orig !== undefined) {
+          clip.timelineStart = Math.round((orig + clampedDelta) * 100) / 100;
+        }
+      }
+      // Re-sort and resolve overlaps with non-group clips
+      track.clips.sort((a, b) => a.timelineStart - b.timelineStart);
+      for (let i = 0; i < track.clips.length - 1; i++) {
+        const current = track.clips[i];
+        const currentEnd = store.getClipEnd(current);
+        const nextClip = track.clips[i + 1];
+        if (nextClip.timelineStart < currentEnd) {
+          nextClip.timelineStart = Math.round(currentEnd * 100) / 100;
+        }
+      }
+    }
+    store.debouncedSave();
+  }
+
+  function onUp() {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    store.endUndoGroup();
+  }
+
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
 const DEFAULT_ZOOM = 50;
 
 const zoomPercent = computed(() => Math.round((props.tl.zoomLevel.value / DEFAULT_ZOOM) * 100));
@@ -187,13 +305,17 @@ function onTrim(trackClips: Clip[], trimmedClip: Clip, changes: Partial<Clip>) {
     .sort((a, b) => a.timelineStart - b.timelineStart);
 
   if (changes.outPoint !== undefined && newEnd > oldEnd) {
-    // Extending right: push subsequent clips forward
-    const overflow = newEnd - oldEnd;
-    for (const clip of sorted) {
-      if (clip.timelineStart >= oldEnd - 0.01) {
-        store.updateClip(clip.id, {
-          timelineStart: Math.round((clip.timelineStart + overflow) * 100) / 100,
-        });
+    // Extending right: only push clips that actually overlap, then cascade
+    const subsequent = sorted.filter((c) => c.timelineStart >= oldEnd - 0.01);
+    let pushEdge = newEnd;
+    for (const clip of subsequent) {
+      if (clip.timelineStart < pushEdge - 0.001) {
+        const pushed = Math.round(pushEdge * 100) / 100;
+        const clipDur = clip.outPoint - clip.inPoint;
+        store.updateClip(clip.id, { timelineStart: pushed });
+        pushEdge = pushed + clipDur;
+      } else {
+        break;
       }
     }
   } else if (
@@ -478,6 +600,24 @@ watch(
 .track-clips {
   flex: 1;
   position: relative;
-  min-height: 58px;
+  min-height: 62px;
+}
+
+.group-handle {
+  position: absolute;
+  top: 0;
+  height: 4px;
+  background: rgba(255, 214, 0, 0.6);
+  border-radius: 2px;
+  cursor: grab;
+  z-index: 5;
+}
+
+.group-handle:hover {
+  background: rgba(255, 214, 0, 0.9);
+}
+
+.group-handle:active {
+  cursor: grabbing;
 }
 </style>

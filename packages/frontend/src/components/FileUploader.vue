@@ -131,12 +131,25 @@
       </ul>
     </div>
   </div>
+  <ConfirmModal
+    v-if="sourceToDelete"
+    :title="deleteModalTitle"
+    :message="deleteModalMessage"
+    :warning="deleteModalWarning"
+    :confirm-label="sourceInUse ? undefined : 'Remove'"
+    :disable-confirm="sourceInUse"
+    :force-label="sourceInUse ? 'Remove anyway' : undefined"
+    @confirm="executeRemoveSource"
+    @force="forceRemoveSource"
+    @cancel="sourceToDelete = null"
+  />
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue';
-import type { SourceFile } from '@video-editor/shared';
+import type { SourceFile, ProjectConfig } from '@video-editor/shared';
 import * as api from '../api/client';
+import ConfirmModal from './ConfirmModal.vue';
 
 const THUMB_COUNT = 6;
 const HOVER_INTERVAL_MS = 600;
@@ -144,6 +157,7 @@ const HOVER_INTERVAL_MS = 600;
 const props = defineProps<{
   projectId: string;
   sources: SourceFile[];
+  config: ProjectConfig;
 }>();
 
 const emit = defineEmits<{
@@ -224,9 +238,52 @@ function onFileSelect(e: Event) {
   }
 }
 
-async function removeSource(sourceId: string) {
-  await api.deleteSource(props.projectId, sourceId);
-  emit('removeSource', sourceId);
+const sourceToDelete = ref<string | null>(null);
+
+const sourceInUse = computed(() => {
+  if (!sourceToDelete.value) return false;
+  return props.config.timeline.tracks.some((track) =>
+    track.clips.some((c) => c.sourceId === sourceToDelete.value),
+  );
+});
+
+const deleteSourceFile = computed(() => props.sources.find((s) => s.id === sourceToDelete.value));
+
+const deleteModalTitle = computed(() => 'Remove source');
+
+const deleteModalMessage = computed(() => {
+  const name = deleteSourceFile.value?.filename ?? 'this source';
+  if (sourceInUse.value) {
+    return `"${name}" is currently used in the timeline.`;
+  }
+  return `Are you sure you want to remove "${name}"?`;
+});
+
+const deleteModalWarning = computed(() => {
+  if (sourceInUse.value) {
+    return 'Removing it will also delete all clips using this source from the timeline.';
+  }
+  return undefined;
+});
+
+function removeSource(sourceId: string) {
+  sourceToDelete.value = sourceId;
+}
+
+async function executeRemoveSource() {
+  if (!sourceToDelete.value) return;
+  const id = sourceToDelete.value;
+  sourceToDelete.value = null;
+  try {
+    await api.deleteSource(props.projectId, id);
+  } catch (err) {
+    console.error('Failed to delete source:', err);
+  }
+  emit('removeSource', id);
+}
+
+async function forceRemoveSource() {
+  await executeRemoveSource();
 }
 
 function onDragStart(e: DragEvent, source: SourceFile) {

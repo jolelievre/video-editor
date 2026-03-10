@@ -1,4 +1,5 @@
 <template>
+  <ToastContainer />
   <div v-if="store.loading" class="loading">Loading project...</div>
   <div v-else-if="store.config" class="editor">
     <header class="toolbar">
@@ -15,6 +16,7 @@
         <FileUploader
           :project-id="store.config.id"
           :sources="store.config.sources"
+          :config="store.config"
           @uploaded="onSourceUploaded"
           @add-to-timeline="store.addClipToTimeline($event)"
           @remove-source="onSourceRemoved"
@@ -73,6 +75,7 @@
           v-else
           :clip="selectedClip"
           :source="selectedSource"
+          :project-id="store.config.id"
           @update="onClipUpdate"
         />
       </div>
@@ -104,9 +107,13 @@ import Timeline from './Timeline.vue';
 import ExportButton from './ExportButton.vue';
 import ClipInspector from './ClipInspector.vue';
 import TextClipInspector from './TextClipInspector.vue';
+import ToastContainer from './ToastContainer.vue';
+import { useToast } from '../composables/useToast';
 
 const route = useRoute();
 const store = useProjectStore();
+
+const { showToast } = useToast();
 
 const tl = useTimeline(() => store.config);
 const preview = useVideoPreview(
@@ -231,6 +238,26 @@ function cutAtPlayhead() {
 function onKeyDown(e: KeyboardEvent) {
   const tag = (e.target as HTMLElement).tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+  const key = e.key.toLowerCase();
+  if (key === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+    e.preventDefault();
+    if (!store.canUndo) {
+      showToast('Nothing to undo');
+    } else {
+      store.undo();
+    }
+    return;
+  }
+  if (key === 'z' && (e.ctrlKey || e.metaKey) && e.shiftKey) {
+    e.preventDefault();
+    if (!store.canRedo) {
+      showToast('Nothing to redo');
+    } else {
+      store.redo();
+    }
+    return;
+  }
 
   if (e.key === 'c' && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault();

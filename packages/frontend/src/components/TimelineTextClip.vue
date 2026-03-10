@@ -7,6 +7,20 @@
   >
     <div class="handle left" @mousedown.stop="startTrim('left', $event)" />
     <div class="clip-body" @mousedown.stop="startDrag($event)">
+      <div
+        v-if="animInWidthPx > 0"
+        class="anim-zone anim-in"
+        :style="{ width: animInWidthPx + 'px' }"
+      >
+        <span class="anim-icon">{{ animInIcon }}</span>
+      </div>
+      <div
+        v-if="animOutWidthPx > 0"
+        class="anim-zone anim-out"
+        :style="{ width: animOutWidthPx + 'px' }"
+      >
+        <span class="anim-icon">{{ animOutIcon }}</span>
+      </div>
       <div class="clip-overlay">
         <span class="clip-label">{{ textClip.content }}</span>
         <span class="clip-duration">{{ formatDuration(textClip.duration) }}</span>
@@ -20,6 +34,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { TextClip } from '@video-editor/shared';
+import { useProjectStore } from '../stores/project';
 
 const props = defineProps<{
   textClip: TextClip;
@@ -35,17 +50,42 @@ const emit = defineEmits<{
   select: [];
 }>();
 
+const store = useProjectStore();
+
 const clipStyle = computed(() => ({
   left: `${props.textClip.timelineStart * props.zoom}px`,
   width: `${props.textClip.duration * props.zoom}px`,
 }));
+
+const ANIM_ICONS: Record<string, string> = {
+  fade: '\u25D0',
+  slide: '\u2192',
+  typewriter: 'Aa',
+};
+
+const animInWidthPx = computed(() => {
+  const anim = props.textClip.animationIn;
+  if (!anim || anim.type === 'none' || !anim.duration) return 0;
+  return Math.min(anim.duration * props.zoom, props.textClip.duration * props.zoom * 0.45);
+});
+
+const animOutWidthPx = computed(() => {
+  const anim = props.textClip.animationOut;
+  if (!anim || anim.type === 'none' || !anim.duration) return 0;
+  return Math.min(anim.duration * props.zoom, props.textClip.duration * props.zoom * 0.45);
+});
+
+const animInIcon = computed(() => ANIM_ICONS[props.textClip.animationIn?.type ?? ''] ?? '');
+const animOutIcon = computed(() => ANIM_ICONS[props.textClip.animationOut?.type ?? ''] ?? '');
 
 function onSelect() {
   emit('select');
 }
 
 function startDrag(e: MouseEvent) {
+  e.preventDefault();
   emit('select');
+  store.beginUndoGroup();
   const startX = e.clientX;
   const startPos = props.textClip.timelineStart;
 
@@ -58,6 +98,7 @@ function startDrag(e: MouseEvent) {
   function onUp() {
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
+    store.endUndoGroup();
   }
 
   document.addEventListener('mousemove', onMove);
@@ -65,7 +106,9 @@ function startDrag(e: MouseEvent) {
 }
 
 function startTrim(side: 'left' | 'right', e: MouseEvent) {
+  e.preventDefault();
   emit('select');
+  store.beginUndoGroup();
   const startX = e.clientX;
   const startTimelineStart = props.textClip.timelineStart;
   const startDuration = props.textClip.duration;
@@ -94,6 +137,7 @@ function startTrim(side: 'left' | 'right', e: MouseEvent) {
   function onUp() {
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
+    store.endUndoGroup();
   }
 
   document.addEventListener('mousemove', onMove);
@@ -109,7 +153,7 @@ function formatDuration(seconds: number): string {
 <style scoped>
 .text-clip {
   position: absolute;
-  top: 4px;
+  top: 8px;
   height: 48px;
   background: #00897b;
   border-radius: 4px;
@@ -163,6 +207,47 @@ function formatDuration(seconds: number): string {
   overflow: hidden;
   min-width: 0;
   position: relative;
+}
+
+.anim-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 3;
+  pointer-events: none;
+  display: flex;
+  align-items: flex-start;
+  padding-top: 2px;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.08),
+    rgba(255, 255, 255, 0.08) 3px,
+    transparent 3px,
+    transparent 6px
+  );
+  border-right: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.anim-zone.anim-in {
+  left: 0;
+  border-radius: 0;
+  justify-content: flex-start;
+  padding-left: 2px;
+}
+
+.anim-zone.anim-out {
+  right: 0;
+  border-right: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.25);
+  justify-content: flex-end;
+  padding-right: 2px;
+}
+
+.anim-icon {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.7);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  line-height: 1;
 }
 
 .clip-overlay {

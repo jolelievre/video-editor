@@ -58,6 +58,7 @@
 import { computed } from 'vue';
 import type { Clip, SourceFile } from '@video-editor/shared';
 import { getThumbnailUrl, getStreamUrl } from '../api/client';
+import { useProjectStore } from '../stores/project';
 
 const THUMB_WIDTH = 80;
 const THUMB_COUNT = 6;
@@ -79,6 +80,8 @@ const emit = defineEmits<{
   remove: [];
   select: [];
 }>();
+
+const store = useProjectStore();
 
 const isImage = computed(() => (props.source?.type ?? 'video') === 'image');
 
@@ -202,7 +205,9 @@ function onSelect() {
 }
 
 function startDrag(e: MouseEvent) {
+  e.preventDefault();
   emit('select');
+  store.beginUndoGroup();
   const startX = e.clientX;
   const startPos = props.clip.timelineStart;
 
@@ -215,6 +220,7 @@ function startDrag(e: MouseEvent) {
   function onUp() {
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
+    store.endUndoGroup();
   }
 
   document.addEventListener('mousemove', onMove);
@@ -222,7 +228,9 @@ function startDrag(e: MouseEvent) {
 }
 
 function startTrim(side: 'in' | 'out', e: MouseEvent) {
+  e.preventDefault();
   emit('select');
+  store.beginUndoGroup();
   const startX = e.clientX;
   const startIn = props.clip.inPoint;
   const startOut = props.clip.outPoint;
@@ -253,6 +261,7 @@ function startTrim(side: 'in' | 'out', e: MouseEvent) {
   function onUp() {
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
+    store.endUndoGroup();
   }
 
   document.addEventListener('mousemove', onMove);
@@ -268,9 +277,9 @@ function formatDuration(seconds: number): string {
 <style scoped>
 .clip {
   position: absolute;
-  top: 4px;
+  top: 8px;
   height: 48px;
-  background: #2d4a7a;
+  background: #1a6a7a;
   border-radius: 4px;
   display: flex;
   align-items: stretch;
@@ -290,7 +299,15 @@ function formatDuration(seconds: number): string {
 }
 
 .clip:hover {
-  border-color: #6c63ff;
+  border-color: #1a8a9a;
+}
+
+.clip.audio-clip:hover {
+  border-color: #7c6bbf;
+}
+
+.clip.image-clip:hover {
+  border-color: #2d6a4f;
 }
 
 .clip.selected {
@@ -326,12 +343,33 @@ function formatDuration(seconds: number): string {
 
 .handle.left {
   border-radius: 4px 0 0 4px;
-  background: rgba(108, 99, 255, 0.5);
+  background: rgba(26, 138, 154, 0.5);
 }
 
 .handle.right {
   border-radius: 0 4px 4px 0;
-  background: rgba(108, 99, 255, 0.5);
+  background: rgba(26, 138, 154, 0.5);
+}
+
+.audio-clip .handle.left {
+  background: rgba(124, 107, 191, 0.5);
+}
+
+.audio-clip .handle.right {
+  background: rgba(124, 107, 191, 0.5);
+}
+
+.image-clip .handle.left {
+  background: rgba(45, 106, 79, 0.7);
+}
+
+.image-clip .handle.right {
+  background: rgba(45, 106, 79, 0.7);
+}
+
+.image-clip:hover .handle.left,
+.image-clip:hover .handle.right {
+  background: rgba(45, 106, 79, 0.9);
 }
 
 .clip-body {
