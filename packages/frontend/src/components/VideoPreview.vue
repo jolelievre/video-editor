@@ -521,7 +521,6 @@ function formatTime(seconds: number): string {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
 }
 
 .video-container {
@@ -705,5 +704,9 @@ video.hidden {
 .placeholder {
   color: #555;
   font-size: 14px;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 </style>
