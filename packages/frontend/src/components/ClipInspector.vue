@@ -34,6 +34,8 @@
             max="150"
             step="1"
             :value="Math.round((clip.volume ?? 1) * 100)"
+            @mousedown="onSliderStart"
+            @mouseup="onSliderEnd"
             @input="onVolumeChange"
           />
           <span class="slider-value">{{ Math.round((clip.volume ?? 1) * 100) }}%</span>
@@ -49,6 +51,8 @@
             :max="maxFade"
             step="0.1"
             :value="clip.fadeIn ?? 0"
+            @mousedown="onSliderStart"
+            @mouseup="onSliderEnd"
             @input="onFadeInChange"
           />
           <span class="slider-value">{{ (clip.fadeIn ?? 0).toFixed(1) }}s</span>
@@ -64,6 +68,8 @@
             :max="maxFade"
             step="0.1"
             :value="clip.fadeOut ?? 0"
+            @mousedown="onSliderStart"
+            @mouseup="onSliderEnd"
             @input="onFadeOutChange"
           />
           <span class="slider-value">{{ (clip.fadeOut ?? 0).toFixed(1) }}s</span>
@@ -80,6 +86,7 @@
 import { computed } from 'vue';
 import type { Clip, SourceFile } from '@video-editor/shared';
 import { getThumbnailUrl, getStreamUrl } from '../api/client';
+import { useProjectStore } from '../stores/project';
 
 const ACCENT_COLORS: Record<string, string> = {
   video: '#2d4a7a',
@@ -96,6 +103,16 @@ const props = defineProps<{
 const emit = defineEmits<{
   update: [changes: Partial<Clip>];
 }>();
+
+const store = useProjectStore();
+
+function onSliderStart() {
+  store.beginUndoGroup();
+}
+
+function onSliderEnd() {
+  store.endUndoGroup();
+}
 
 const maxFade = computed(() => {
   if (!props.clip) return 10;

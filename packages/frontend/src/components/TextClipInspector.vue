@@ -39,6 +39,8 @@
             max="500"
             step="1"
             :value="textClip.style.fontSize"
+            @mousedown="onSliderStart"
+            @mouseup="onSliderEnd"
             @input="onFontSizeChange"
           />
           <span class="slider-value">{{ textClip.style.fontSize }}px</span>
@@ -82,6 +84,8 @@
             max="100"
             step="0.1"
             :value="textClip.position.x"
+            @mousedown="onSliderStart"
+            @mouseup="onSliderEnd"
             @input="onPositionXChange"
           />
           <span class="slider-value">{{ textClip.position.x.toFixed(1) }}%</span>
@@ -97,6 +101,8 @@
             max="100"
             step="0.1"
             :value="textClip.position.y"
+            @mousedown="onSliderStart"
+            @mouseup="onSliderEnd"
             @input="onPositionYChange"
           />
           <span class="slider-value">{{ textClip.position.y.toFixed(1) }}%</span>
@@ -228,6 +234,7 @@ import type {
   TypewriterAlignment,
 } from '@video-editor/shared';
 import { BUNDLED_FONTS } from '@video-editor/shared/fonts';
+import { useProjectStore } from '../stores/project';
 
 const sortedFonts = computed(() =>
   [...BUNDLED_FONTS].sort((a, b) => a.family.localeCompare(b.family)),
@@ -240,6 +247,16 @@ const props = defineProps<{
 const emit = defineEmits<{
   update: [changes: Partial<TextClip>];
 }>();
+
+const store = useProjectStore();
+
+function onSliderStart() {
+  store.beginUndoGroup();
+}
+
+function onSliderEnd() {
+  store.endUndoGroup();
+}
 
 const fontDropdownOpen = ref(false);
 const fontSelectEl = ref<HTMLElement | null>(null);
