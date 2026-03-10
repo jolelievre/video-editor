@@ -16,22 +16,24 @@ const { toasts } = useToast();
 .toast-container {
   position: fixed;
   top: 12px;
-  right: 12px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 1000;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 8px;
   pointer-events: none;
 }
 
 .toast {
-  background: #1a1a2e;
-  border: 1px solid #4a4e69;
-  color: #ccc;
+  background: #ff9f43;
+  color: #1a1a2e;
   font-size: 12px;
-  padding: 8px 14px;
+  font-weight: 600;
+  padding: 8px 18px;
   border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
   opacity: 1;
   transition: opacity 0.4s ease;
 }
