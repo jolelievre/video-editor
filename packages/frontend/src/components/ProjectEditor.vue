@@ -1,4 +1,5 @@
 <template>
+  <ToastContainer />
   <div v-if="store.loading" class="loading">Loading project...</div>
   <div v-else-if="store.config" class="editor">
     <header class="toolbar">
@@ -105,9 +106,13 @@ import Timeline from './Timeline.vue';
 import ExportButton from './ExportButton.vue';
 import ClipInspector from './ClipInspector.vue';
 import TextClipInspector from './TextClipInspector.vue';
+import ToastContainer from './ToastContainer.vue';
+import { useToast } from '../composables/useToast';
 
 const route = useRoute();
 const store = useProjectStore();
+
+const { showToast } = useToast();
 
 const tl = useTimeline(() => store.config);
 const preview = useVideoPreview(
@@ -236,12 +241,20 @@ function onKeyDown(e: KeyboardEvent) {
   const key = e.key.toLowerCase();
   if (key === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
     e.preventDefault();
-    store.undo();
+    if (!store.canUndo) {
+      showToast('Nothing to undo');
+    } else {
+      store.undo();
+    }
     return;
   }
   if (key === 'z' && (e.ctrlKey || e.metaKey) && e.shiftKey) {
     e.preventDefault();
-    store.redo();
+    if (!store.canRedo) {
+      showToast('Nothing to redo');
+    } else {
+      store.redo();
+    }
     return;
   }
 
