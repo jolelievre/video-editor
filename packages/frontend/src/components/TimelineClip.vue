@@ -279,7 +279,7 @@ function formatDuration(seconds: number): string {
   position: absolute;
   top: 8px;
   height: 48px;
-  background: #2d4a7a;
+  background: #1a6a7a;
   border-radius: 4px;
   display: flex;
   align-items: stretch;
@@ -299,7 +299,15 @@ function formatDuration(seconds: number): string {
 }
 
 .clip:hover {
-  border-color: #6c63ff;
+  border-color: #1a8a9a;
+}
+
+.clip.audio-clip:hover {
+  border-color: #7c6bbf;
+}
+
+.clip.image-clip:hover {
+  border-color: #2d6a4f;
 }
 
 .clip.selected {
@@ -335,12 +343,20 @@ function formatDuration(seconds: number): string {
 
 .handle.left {
   border-radius: 4px 0 0 4px;
-  background: rgba(108, 99, 255, 0.5);
+  background: rgba(26, 138, 154, 0.5);
 }
 
 .handle.right {
   border-radius: 0 4px 4px 0;
-  background: rgba(108, 99, 255, 0.5);
+  background: rgba(26, 138, 154, 0.5);
+}
+
+.audio-clip .handle.left {
+  background: rgba(124, 107, 191, 0.5);
+}
+
+.audio-clip .handle.right {
+  background: rgba(124, 107, 191, 0.5);
 }
 
 .image-clip .handle.left {
