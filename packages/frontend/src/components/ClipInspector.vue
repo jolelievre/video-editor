@@ -89,9 +89,9 @@ import { getThumbnailUrl, getStreamUrl } from '../api/client';
 import { useProjectStore } from '../stores/project';
 
 const ACCENT_COLORS: Record<string, string> = {
-  video: '#2d4a7a',
+  video: '#1a8a9a',
   image: '#2d6a4f',
-  audio: '#3a2d6e',
+  audio: '#7c6bbf',
 };
 
 const props = defineProps<{
